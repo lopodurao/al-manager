@@ -85,12 +85,17 @@ def get_reservation(rid: str, db: Session = Depends(get_db), _=Auth):
     return r
 
 @router.put("/{rid}", response_model=schemas.ReservationOut)
-def update_reservation(rid: str, data: schemas.ReservationUpdate, db: Session = Depends(get_db), _=Auth):
+async def update_reservation(rid: str, data: schemas.ReservationUpdate, db: Session = Depends(get_db), _=Auth):
     r = db.query(models.Reservation).filter(models.Reservation.id == rid).first()
     if not r: raise HTTPException(404, "Reserva não encontrada")
+    was_active = r.status != "cancelled"
     for k, v in data.model_dump().items():
         setattr(r, k, v)
     db.commit(); db.refresh(r)
+    # Cancel Livvi booking if reservation was just cancelled
+    if was_active and r.status == "cancelled" and r.livvi_booking_id:
+        from .. import livvi_service
+        await livvi_service.delete_booking(r.livvi_booking_id)
     return r
 
 @router.patch("/{rid}/sef-reported", response_model=schemas.ReservationOut)
@@ -102,10 +107,14 @@ def mark_sef_reported(rid: str, db: Session = Depends(get_db), _=Auth):
     return r
 
 @router.delete("/{rid}", status_code=204)
-def delete_reservation(rid: str, db: Session = Depends(get_db), _=Auth):
+async def delete_reservation(rid: str, db: Session = Depends(get_db), _=Auth):
     r = db.query(models.Reservation).filter(models.Reservation.id == rid).first()
     if not r: raise HTTPException(404)
+    livvi_id = r.livvi_booking_id
     db.delete(r); db.commit()
+    if livvi_id:
+        from .. import livvi_service
+        await livvi_service.delete_booking(livvi_id)
 
 @router.post("/{rid}/send-invoice")
 async def send_invoice(rid: str, file: UploadFile = File(...), db: Session = Depends(get_db), _=Auth):
