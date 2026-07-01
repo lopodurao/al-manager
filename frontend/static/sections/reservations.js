@@ -143,10 +143,18 @@ async function doSaveReservation(id) {
   if (!name||!checkin||!checkout) { alert('Preenche os campos obrigatórios'); return; }
   if (checkout<=checkin) { alert('Check-out deve ser depois do check-in'); return; }
   const d = { prop_id:document.getElementById('rf-prop').value, guest_name:name, guest_email:document.getElementById('rf-email').value.trim(), guest_phone:document.getElementById('rf-phone').value.trim(), guest_nationality:document.getElementById('rf-nat').value, doc_id:document.getElementById('rf-doc').value.trim(), guests:+document.getElementById('rf-guests').value, checkin, checkout, channel:document.getElementById('rf-channel').value, status:document.getElementById('rf-status').value, price:parseFloat(document.getElementById('rf-price').value)||0, commission:parseFloat(document.getElementById('rf-commission').value)||0, sef_reported:!!document.getElementById('rf-sef').value, room:document.getElementById('rf-room').value.trim(), notes:document.getElementById('rf-notes').value };
+  const btn = document.getElementById('save-res-btn');
+  const isNew = !id && d.status === 'confirmed';
+  btn.disabled = true;
+  btn.textContent = isNew ? '⏳ A gerar PIN Livvi e enviar email…' : '⏳ A guardar…';
   try {
     id ? await api.updateReservation(id,d) : await api.createReservation(d);
     closeModal(); await navigate('reservations'); toastMsg(id?'Reserva atualizada':'Reserva criada');
-  } catch(e) { toastMsg('Erro: '+e.message); }
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = 'Guardar';
+    toastMsg('Erro: '+e.message);
+  }
 }
 async function deleteReservation(id) {
   if (!confirm('Apagar esta reserva?')) return;
