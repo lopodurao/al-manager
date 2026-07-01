@@ -18,7 +18,9 @@ def _send(to: str, subject: str, html: str) -> bool:
         msg["From"]    = f"Casa da Penha <{SMTP_FROM}>"
         msg["To"]      = to
         msg.attach(MIMEText(html, "html", "utf-8"))
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
+        with smtplib.SMTP("smtp.gmail.com", 587) as s:
+            s.ehlo()
+            s.starttls()
             s.login(SMTP_USER, SMTP_PASS)
             s.sendmail(SMTP_FROM, to, msg.as_string())
         logger.info(f"Email enviado para {to}: {subject}")

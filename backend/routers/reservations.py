@@ -166,7 +166,9 @@ async def send_invoice(rid: str, file: UploadFile = File(...), db: Session = Dep
         encoders.encode_base64(part)
         part.add_header("Content-Disposition", f'attachment; filename="{filename}"')
         msg.attach(part)
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
+        with smtplib.SMTP("smtp.gmail.com", 587) as s:
+            s.ehlo()
+            s.starttls()
             s.login(smtp_user, smtp_pass)
             s.sendmail(smtp_user, r.guest_email, msg.as_string())
     except Exception as e:
