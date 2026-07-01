@@ -48,9 +48,9 @@ async def create_booking(
 
     try:
         token = await _get_token()
-        # Livvi expects datetime format: "YYYY-MM-DDTHH:mm:ss"
-        start_dt = f"{checkin}T15:00:00"
-        end_dt   = f"{checkout}T11:00:00"
+        # Livvi expects datetime format: "YYYY-MM-DD HH:mm" (space separator, no seconds)
+        start_dt = f"{checkin} 15:00"
+        end_dt   = f"{checkout} 11:00"
         name_parts = guest_name.split(",", 1)
         surname = name_parts[0].strip()
         first   = name_parts[1].strip() if len(name_parts) > 1 else surname
