@@ -63,6 +63,7 @@ function renderResRows(list) {
       <td>${statusBadge(r.status)}</td><td class="fw-700">${fmtMoney(r.price)}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-sm btn-outline" onclick="editReservation('${r.id}')">Editar</button>
+        ${r.guest_email ? `<button class="btn btn-sm btn-success" onclick="openSendInvoice('${r.id}','${escHtml(r.guest_email)}','${escHtml(r.guest_name)}')">📄 Fatura</button>` : ''}
         <button class="btn btn-sm btn-danger" onclick="deleteReservation('${r.id}')">✕</button>
       </td></tr>`;
   }).join('');
@@ -137,4 +138,46 @@ async function deleteReservation(id) {
   if (!confirm('Apagar esta reserva?')) return;
   try { await api.deleteReservation(id); await navigate('reservations'); toastMsg('Reserva apagada'); }
   catch(e) { toastMsg('Erro: '+e.message); }
+}
+
+function openSendInvoice(rid, email, guestName) {
+  openModal('Enviar Fatura', `
+    <div style="margin-bottom:16px;padding:12px 16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;font-size:13.5px">
+      📧 Será enviado para <strong>${escHtml(email)}</strong> (${escHtml(guestName)})
+    </div>
+    <div class="form-group">
+      <label>Ficheiro PDF da fatura (gerado no Primavera)</label>
+      <input type="file" id="invoice-file" accept=".pdf,.PDF" style="padding:8px">
+    </div>
+    <div id="invoice-status" style="min-height:20px;font-size:13px;margin-bottom:8px"></div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="doSendInvoice('${rid}')">📤 Enviar fatura</button>
+    </div>
+  `);
+}
+
+async function doSendInvoice(rid) {
+  const fileInput = document.getElementById('invoice-file');
+  const status    = document.getElementById('invoice-status');
+  if (!fileInput.files.length) { status.textContent = '⚠ Seleciona o ficheiro PDF primeiro.'; status.style.color = '#ef4444'; return; }
+  const file = fileInput.files[0];
+  if (file.size > 10 * 1024 * 1024) { status.textContent = '⚠ Ficheiro demasiado grande (máx. 10 MB).'; status.style.color = '#ef4444'; return; }
+  status.textContent = 'A enviar…'; status.style.color = '#6b7280';
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const res = await fetch(`/api/reservations/${rid}/send-invoice`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${_token}` },
+      body: form,
+    });
+    if (!res.ok) { const e = await res.json().catch(()=>({detail:'Erro desconhecido'})); throw new Error(e.detail); }
+    const data = await res.json();
+    closeModal();
+    toastMsg(`✓ Fatura enviada para ${data.sent_to}`);
+  } catch(e) {
+    status.textContent = '✕ Erro: ' + e.message;
+    status.style.color = '#ef4444';
+  }
 }
