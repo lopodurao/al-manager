@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from .. import models, schemas, auth
@@ -33,8 +33,39 @@ def _check_overlap(db, prop_id: str, checkin: str, checkout: str, exclude_id: st
     if conflict:
         raise HTTPException(409, f"Já existe uma reserva para esta propriedade de {conflict.checkin} a {conflict.checkout} ({conflict.guest_name})")
 
+async def _livvi_and_email_bg(reservation_id: str):
+    """Background task: create Livvi PIN and send confirmation email."""
+    from .. import livvi_service
+    from ..email_service import send_booking_confirmation
+    from ..database import SessionLocal
+    import logging
+    logger = logging.getLogger(__name__)
+    db = SessionLocal()
+    try:
+        r = db.query(models.Reservation).filter(models.Reservation.id == reservation_id).first()
+        if not r: return
+        prop = db.query(models.Property).filter(models.Property.id == r.prop_id).first()
+        door_ids = [d.strip() for d in (prop.livvi_door_ids or "").split(",") if d.strip()] if prop else []
+        livvi = await livvi_service.create_booking(
+            reservation_id=r.id, guest_name=r.guest_name,
+            guest_email=r.guest_email or "", checkin=r.checkin,
+            checkout=r.checkout, door_ids=door_ids or None,
+        )
+        if livvi:
+            r.livvi_booking_id = livvi.get("booking_id", "")
+            r.access_pin = livvi.get("pin", "")
+            db.commit()
+        if r.guest_email:
+            rows = db.query(models.Settings).all()
+            settings = {row.key: row.value for row in rows}
+            send_booking_confirmation(r, prop, settings, access_pin=r.access_pin or "")
+    except Exception as e:
+        logger.error(f"Erro background Livvi/email para {reservation_id}: {e}")
+    finally:
+        db.close()
+
 @router.post("", response_model=schemas.ReservationOut, status_code=201)
-async def create_reservation(data: schemas.ReservationCreate, db: Session = Depends(get_db), _=Auth):
+def create_reservation(data: schemas.ReservationCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), _=Auth):
     if not db.query(models.Property).filter(models.Property.id == data.prop_id).first():
         raise HTTPException(400, "Propriedade inválida")
     if data.checkout <= data.checkin:
@@ -42,7 +73,6 @@ async def create_reservation(data: schemas.ReservationCreate, db: Session = Depe
     _check_overlap(db, data.prop_id, data.checkin, data.checkout)
     r = models.Reservation(id=str(uuid.uuid4()), **data.model_dump())
     db.add(r)
-    # Auto-create transactions
     if data.price > 0:
         db.add(models.Transaction(
             id=str(uuid.uuid4()), prop_id=data.prop_id, res_id=r.id,
@@ -58,39 +88,15 @@ async def create_reservation(data: schemas.ReservationCreate, db: Session = Depe
                 amount=data.commission, channel=data.channel,
                 desc=f"Comissão {channels.get(data.channel, data.channel)}"
             ))
-    # Auto-create cleaning task
     db.add(models.CleaningTask(
         id=str(uuid.uuid4()), prop_id=data.prop_id,
         type="limpeza", date=data.checkout, status="pending",
         priority="high", notes=f"Check-out {data.guest_name}"
     ))
     db.commit(); db.refresh(r)
-
-    # Auto-create Livvi PIN and send confirmation email
+    # Livvi + email em background — não bloqueia a resposta
     if data.status == "confirmed":
-        from .. import livvi_service
-        from ..email_service import send_booking_confirmation
-        from ..database import SessionLocal
-        prop_obj = db.query(models.Property).filter(models.Property.id == r.prop_id).first()
-        door_ids = [d.strip() for d in (prop_obj.livvi_door_ids or "").split(",") if d.strip()] if prop_obj else []
-        livvi = await livvi_service.create_booking(
-            reservation_id=r.id,
-            guest_name=r.guest_name,
-            guest_email=r.guest_email or "",
-            checkin=r.checkin,
-            checkout=r.checkout,
-            door_ids=door_ids or None,
-        )
-        if livvi:
-            r.livvi_booking_id = livvi.get("booking_id", "")
-            r.access_pin = livvi.get("pin", "")
-            db.commit(); db.refresh(r)
-        if r.guest_email:
-            rows = db.query(models.Settings).all()
-            settings = {row.key: row.value for row in rows}
-            prop = db.query(models.Property).filter(models.Property.id == r.prop_id).first()
-            send_booking_confirmation(r, prop, settings, access_pin=r.access_pin or "")
-
+        background_tasks.add_task(_livvi_and_email_bg, r.id)
     return r
 
 @router.get("/{rid}", response_model=schemas.ReservationOut)

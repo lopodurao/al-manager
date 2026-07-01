@@ -124,6 +124,7 @@ function reservationForm(r) {
     <div class="form-group"></div>
   </div>
   <div class="form-group"><label>Notas</label><textarea id="rf-notes">${escHtml(r?.notes||'')}</textarea></div>
+  <div id="res-form-error" style="display:none;color:#dc2626;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;font-size:13.5px;margin-bottom:4px"></div>
   <div class="form-actions">
     <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
     <button class="btn btn-primary" id="save-res-btn">Guardar</button>
@@ -145,15 +146,18 @@ async function doSaveReservation(id) {
   const d = { prop_id:document.getElementById('rf-prop').value, guest_name:name, guest_email:document.getElementById('rf-email').value.trim(), guest_phone:document.getElementById('rf-phone').value.trim(), guest_nationality:document.getElementById('rf-nat').value, doc_id:document.getElementById('rf-doc').value.trim(), guests:+document.getElementById('rf-guests').value, checkin, checkout, channel:document.getElementById('rf-channel').value, status:document.getElementById('rf-status').value, price:parseFloat(document.getElementById('rf-price').value)||0, commission:parseFloat(document.getElementById('rf-commission').value)||0, sef_reported:!!document.getElementById('rf-sef').value, room:document.getElementById('rf-room').value.trim(), notes:document.getElementById('rf-notes').value };
   const btn = document.getElementById('save-res-btn');
   const isNew = !id && d.status === 'confirmed';
+  const errBox = document.getElementById('res-form-error');
+  if (errBox) { errBox.style.display = 'none'; errBox.textContent = ''; }
   btn.disabled = true;
-  btn.textContent = isNew ? '⏳ A gerar PIN Livvi e enviar email…' : '⏳ A guardar…';
+  btn.textContent = '⏳ A guardar…';
   try {
     id ? await api.updateReservation(id,d) : await api.createReservation(d);
-    closeModal(); await navigate('reservations'); toastMsg(id?'Reserva atualizada':'Reserva criada');
+    closeModal(); await navigate('reservations');
+    toastMsg(id ? 'Reserva atualizada' : `✓ Reserva criada${isNew ? ' — PIN Livvi e email a ser enviados em segundo plano' : ''}`);
   } catch(e) {
     btn.disabled = false;
     btn.textContent = 'Guardar';
-    toastMsg('Erro: '+e.message);
+    if (errBox) { errBox.textContent = '⚠ ' + e.message; errBox.style.display = 'block'; }
   }
 }
 async function deleteReservation(id) {
