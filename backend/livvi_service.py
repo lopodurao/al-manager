@@ -1,11 +1,13 @@
 import httpx, os, base64, logging
 from datetime import datetime, timezone
+from urllib.parse import urlencode
 
 logger = logging.getLogger(__name__)
 
 LIVVI_CLIENT_ID     = os.getenv("LIVVI_CLIENT_ID", "")
 LIVVI_CLIENT_SECRET = os.getenv("LIVVI_CLIENT_SECRET", "")
-LIVVI_SITE_ID       = os.getenv("LIVVI_SITE_ID", "178738")
+LIVVI_SITE_ID       = os.getenv("LIVVI_SITE_ID", "738")  # site 738 dentro do corp 178
+LIVVI_DOOR_IDS      = os.getenv("LIVVI_DOOR_IDS", "27462,27463")  # ROOM-type doors only
 LIVVI_AUTH_URL      = "https://api.athos.vingcard.com/corp/auth/m2m"
 LIVVI_API_BASE      = "https://api.athos.vingcard.com"
 
@@ -41,31 +43,37 @@ async def create_booking(
     checkin: str,    # "YYYY-MM-DD"
     checkout: str,   # "YYYY-MM-DD"
 ) -> dict | None:
-    """Create a Livvi booking and return the result (includes PIN code)."""
+    """Create a Livvi booking and return PIN code for the guest."""
     if not LIVVI_CLIENT_ID or not LIVVI_CLIENT_SECRET:
         logger.warning("Livvi não configurado — booking não criado")
         return None
 
     try:
         token = await _get_token()
-        # Livvi expects datetime format: "YYYY-MM-DD HH:mm" (space separator, no seconds)
-        start_dt = f"{checkin} 15:00"
-        end_dt   = f"{checkout} 11:00"
+        # ISO 8601 datetime (check-in 15h, check-out 11h)
+        start_dt = f"{checkin}T15:00:00"
+        end_dt   = f"{checkout}T11:00:00"
+
         name_parts = guest_name.split(",", 1)
         surname = name_parts[0].strip()
         first   = name_parts[1].strip() if len(name_parts) > 1 else surname
 
-        payload = (
-            f"siteId={LIVVI_SITE_ID}"
-            f"&name={first}"
-            f"&surname={surname}"
-            f"&startdatetime={start_dt}"
-            f"&enddatetime={end_dt}"
-            f"&externalid={reservation_id}"
-            f"&allowedPersonalData=true"
-            + (f"&email={guest_email}" if guest_email else "")
-            + "&sendAccessByEmail=false"
-        )
+        # doorIds must be ROOM/GENERIC/AMENITY type — MAIN and STAFF doors not allowed in v2
+        door_ids = [d.strip() for d in LIVVI_DOOR_IDS.split(",") if d.strip()]
+
+        params = [
+            ("siteId", LIVVI_SITE_ID),
+            ("startDateTime", start_dt),
+            ("endDateTime", end_dt),
+            ("integrationId", reservation_id[:50]),
+            ("allowedPersonalData", "true"),
+            ("sendPasscode", "false"),
+            ("mainGuest.name", first),
+            ("mainGuest.surname", surname),
+        ] + [("doorIds", did) for did in door_ids]
+
+        if guest_email:
+            params.append(("mainGuest.email", guest_email))
 
         async with httpx.AsyncClient(timeout=15) as client:
             r = await client.post(
@@ -74,13 +82,14 @@ async def create_booking(
                     "Authorization": f"Bearer {token}",
                     "Content-Type": "application/x-www-form-urlencoded",
                 },
-                content=payload.encode(),
+                content=urlencode(params).encode(),
             )
             data = r.json()
             if r.status_code == 200:
                 pin = _extract_pin(data)
-                logger.info(f"Livvi booking criado para {guest_name}: PIN={pin}")
-                return {"booking_id": data.get("id"), "pin": pin, "raw": data}
+                booking_id = str(data.get("id", ""))
+                logger.info(f"Livvi booking {booking_id} criado para {guest_name}: PIN={pin}")
+                return {"booking_id": booking_id, "pin": pin, "raw": data}
             else:
                 logger.error(f"Livvi booking erro {r.status_code}: {data}")
                 return None
@@ -90,12 +99,11 @@ async def create_booking(
 
 
 async def delete_booking(livvi_booking_id: str) -> bool:
-    """Delete a Livvi booking (e.g. on reservation cancellation)."""
+    """Delete a Livvi booking on reservation cancellation."""
     if not LIVVI_CLIENT_ID or not livvi_booking_id:
         return False
     try:
         token = await _get_token()
-        payload = f"siteId={LIVVI_SITE_ID}&bookingId={livvi_booking_id}"
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.post(
                 f"{LIVVI_API_BASE}/corp/site/v2/booking/delete",
@@ -103,7 +111,7 @@ async def delete_booking(livvi_booking_id: str) -> bool:
                     "Authorization": f"Bearer {token}",
                     "Content-Type": "application/x-www-form-urlencoded",
                 },
-                content=payload.encode(),
+                content=urlencode([("siteId", LIVVI_SITE_ID), ("bookingId", livvi_booking_id)]).encode(),
             )
             return r.status_code == 200
     except Exception as e:
@@ -112,15 +120,13 @@ async def delete_booking(livvi_booking_id: str) -> bool:
 
 
 def _extract_pin(data: dict) -> str:
-    """Extract PIN from Livvi booking response."""
-    # PIN may be in guests[0].pin or accessCode or pinCode
-    guests = data.get("guests", [])
-    if guests:
-        guest = guests[0] if isinstance(guests, list) else guests
-        for key in ("pin", "pinCode", "accessCode", "code"):
-            if guest.get(key):
-                return str(guest[key])
-    for key in ("pin", "pinCode", "accessCode", "code", "access_code"):
+    """Extract PIN from Livvi booking response (in mainGuest.passcode)."""
+    main_guest = data.get("mainGuest", {})
+    if main_guest:
+        for key in ("passcode", "pin", "pinCode", "accessCode", "code"):
+            if main_guest.get(key):
+                return str(main_guest[key])
+    for key in ("passcode", "pin", "pinCode", "accessCode", "code"):
         if data.get(key):
             return str(data[key])
     return "—"
