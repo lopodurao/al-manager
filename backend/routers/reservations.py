@@ -20,7 +20,7 @@ def list_reservations(
     return q.order_by(models.Reservation.checkin.desc()).all()
 
 @router.post("", response_model=schemas.ReservationOut, status_code=201)
-def create_reservation(data: schemas.ReservationCreate, db: Session = Depends(get_db), _=Auth):
+async def create_reservation(data: schemas.ReservationCreate, db: Session = Depends(get_db), _=Auth):
     if not db.query(models.Property).filter(models.Property.id == data.prop_id).first():
         raise HTTPException(400, "Propriedade inválida")
     if data.checkout <= data.checkin:
@@ -50,6 +50,29 @@ def create_reservation(data: schemas.ReservationCreate, db: Session = Depends(ge
         priority="high", notes=f"Check-out {data.guest_name}"
     ))
     db.commit(); db.refresh(r)
+
+    # Auto-create Livvi PIN and send confirmation email
+    if data.status == "confirmed":
+        from .. import livvi_service
+        from ..email_service import send_booking_confirmation
+        from ..database import SessionLocal
+        livvi = await livvi_service.create_booking(
+            reservation_id=r.id,
+            guest_name=r.guest_name,
+            guest_email=r.guest_email or "",
+            checkin=r.checkin,
+            checkout=r.checkout,
+        )
+        if livvi:
+            r.livvi_booking_id = livvi.get("booking_id", "")
+            r.access_pin = livvi.get("pin", "")
+            db.commit(); db.refresh(r)
+        if r.guest_email:
+            rows = db.query(models.Settings).all()
+            settings = {row.key: row.value for row in rows}
+            prop = db.query(models.Property).filter(models.Property.id == r.prop_id).first()
+            send_booking_confirmation(r, prop, settings, access_pin=r.access_pin or "")
+
     return r
 
 @router.get("/{rid}", response_model=schemas.ReservationOut)

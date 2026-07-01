@@ -58,6 +58,8 @@ class ReservationCreate(BaseModel):
 class ReservationOut(ReservationCreate):
     id: str
     ical_uid: str = ""
+    livvi_booking_id: str = ""
+    access_pin: str = ""
     created_at: datetime
     model_config = {"from_attributes": True}
 

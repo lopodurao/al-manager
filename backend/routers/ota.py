@@ -69,16 +69,33 @@ def _parse_ical(text: str, prop_id: str, channel: str, db: Session) -> list:
     return new_reservations
 
 
-def _send_confirmation_emails(new_reservations: list, db: Session):
-    """Send booking confirmation email for each new reservation that has an email."""
+async def _livvi_and_email(new_reservations: list, db: Session):
+    """Create Livvi bookings (PIN) and send confirmation emails for new reservations."""
     from ..email_service import send_booking_confirmation
+    from .. import livvi_service
     settings = _get_settings(db)
     for res in new_reservations:
+        # Create Livvi booking for PIN code
+        livvi = await livvi_service.create_booking(
+            reservation_id=res.id,
+            guest_name=res.guest_name,
+            guest_email=res.guest_email or "",
+            checkin=res.checkin,
+            checkout=res.checkout,
+        )
+        pin = ""
+        if livvi:
+            res.livvi_booking_id = livvi.get("booking_id", "")
+            res.access_pin = livvi.get("pin", "")
+            pin = res.access_pin
+            db.commit()
+            logger.info(f"Livvi PIN={pin} para {res.guest_name}")
+
         if not res.guest_email:
             logger.info(f"Reserva {res.id} sem email — confirmação não enviada")
             continue
         prop = db.query(models.Property).filter(models.Property.id == res.prop_id).first()
-        ok = send_booking_confirmation(res, prop, settings)
+        ok = send_booking_confirmation(res, prop, settings, access_pin=pin)
         if ok:
             logger.info(f"Confirmação enviada para {res.guest_email} ({res.guest_name})")
 
@@ -95,7 +112,7 @@ async def sync_channel(cid: str, prop_id: str, db: Session = Depends(get_db), _=
         except Exception as e:
             raise HTTPException(502, f"Erro ao obter calendário: {e}")
     new_res = _parse_ical(resp.text, prop_id, ch.slug, db)
-    _send_confirmation_emails(new_res, db)
+    await _livvi_and_email(new_res, db)
     ch.last_sync = str(date.today())
     db.commit()
     return {"imported": len(new_res)}
@@ -110,7 +127,7 @@ async def import_ical_url(prop_id: str, channel: str, url: str, db: Session = De
         except Exception as e:
             raise HTTPException(502, f"Erro ao obter calendário: {e}")
     new_res = _parse_ical(resp.text, prop_id, channel, db)
-    _send_confirmation_emails(new_res, db)
+    await _livvi_and_email(new_res, db)
     return {"imported": len(new_res)}
 
 
@@ -157,7 +174,7 @@ async def auto_sync_all():
                         resp.raise_for_status()
                         new_res = _parse_ical(resp.text, prop.id, ch.slug, db)
                         if new_res:
-                            _send_confirmation_emails(new_res, db)
+                            await _livvi_and_email(new_res, db)
                             logger.info(f"Auto-sync {ch.name}/{prop.name}: {len(new_res)} novas reservas")
                         ch.last_sync = str(date.today())
                         db.commit()

@@ -28,7 +28,7 @@ def _send(to: str, subject: str, html: str) -> bool:
         return False
 
 
-def send_booking_confirmation(reservation, property_obj, settings: dict) -> bool:
+def send_booking_confirmation(reservation, property_obj, settings: dict, access_pin: str = "") -> bool:
     if not reservation.guest_email:
         return False
 
@@ -110,7 +110,7 @@ def send_booking_confirmation(reservation, property_obj, settings: dict) -> bool
     </div>
     <div class="access">
       <h3>🔑 Instruções de acesso</h3>
-      <p>Código de acesso: <strong>{access_code}</strong></p>
+      {"<p>🔒 Código PIN da fechadura: <strong style='font-size:22px;letter-spacing:.15em;color:#4338ca'>" + access_pin + "</strong></p>" if access_pin and access_pin != "—" else f"<p>Código de acesso: <strong>{access_code}</strong></p>"}
       <p>Chaves: <strong>{key_location}</strong></p>
     </div>
     <p style="color:#4b5563;font-size:14px;line-height:1.7">
