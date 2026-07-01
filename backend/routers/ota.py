@@ -82,6 +82,8 @@ async def _livvi_and_email(new_reservations: list, db: Session):
             guest_email=res.guest_email or "",
             checkin=res.checkin,
             checkout=res.checkout,
+            room=res.room or "",
+            settings=settings,
         )
         pin = ""
         if livvi:

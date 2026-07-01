@@ -51,6 +51,7 @@ class Reservation(Base):
     commission       = Column(Float, default=0)
     sef_reported     = Column(Boolean, default=False)
     ical_uid         = Column(String, default="")
+    room             = Column(String, default="")
     livvi_booking_id = Column(String, default="")
     access_pin       = Column(String, default="")
     notes            = Column(Text, default="")

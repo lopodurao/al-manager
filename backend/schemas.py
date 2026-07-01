@@ -53,6 +53,7 @@ class ReservationCreate(BaseModel):
     price: float = 0
     commission: float = 0
     sef_reported: bool = False
+    room: str = ""
     notes: str = ""
 
 class ReservationOut(ReservationCreate):

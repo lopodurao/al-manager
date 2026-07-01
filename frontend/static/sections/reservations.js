@@ -116,19 +116,33 @@ function reservationForm(r) {
     </select></div>
     <div class="form-group"><label>SEF comunicado?</label><select id="rf-sef"><option value="">Não</option><option value="1" ${r?.sef_reported?'selected':''}>Sim</option></select></div>
   </div>
+  <div class="form-row">
+    <div class="form-group"><label>Quarto / Unidade</label>
+      <input id="rf-room" list="room-list" value="${escHtml(r?.room||'')}" placeholder="ex: Quarto Verde">
+      <datalist id="room-list">${_roomOptions()}</datalist>
+    </div>
+    <div class="form-group"></div>
+  </div>
   <div class="form-group"><label>Notas</label><textarea id="rf-notes">${escHtml(r?.notes||'')}</textarea></div>
   <div class="form-actions">
     <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
     <button class="btn btn-primary" id="save-res-btn">Guardar</button>
   </div>`;
 }
+function _roomOptions() {
+  try {
+    const mapping = JSON.parse(cache.settings.livvi_rooms || '{}');
+    return Object.keys(mapping).map(r => `<option value="${escHtml(r)}">`).join('');
+  } catch { return ''; }
+}
+
 async function doSaveReservation(id) {
   const checkin = document.getElementById('rf-checkin').value;
   const checkout = document.getElementById('rf-checkout').value;
   const name = document.getElementById('rf-name').value.trim();
   if (!name||!checkin||!checkout) { alert('Preenche os campos obrigatórios'); return; }
   if (checkout<=checkin) { alert('Check-out deve ser depois do check-in'); return; }
-  const d = { prop_id:document.getElementById('rf-prop').value, guest_name:name, guest_email:document.getElementById('rf-email').value.trim(), guest_phone:document.getElementById('rf-phone').value.trim(), guest_nationality:document.getElementById('rf-nat').value, doc_id:document.getElementById('rf-doc').value.trim(), guests:+document.getElementById('rf-guests').value, checkin, checkout, channel:document.getElementById('rf-channel').value, status:document.getElementById('rf-status').value, price:parseFloat(document.getElementById('rf-price').value)||0, commission:parseFloat(document.getElementById('rf-commission').value)||0, sef_reported:!!document.getElementById('rf-sef').value, notes:document.getElementById('rf-notes').value };
+  const d = { prop_id:document.getElementById('rf-prop').value, guest_name:name, guest_email:document.getElementById('rf-email').value.trim(), guest_phone:document.getElementById('rf-phone').value.trim(), guest_nationality:document.getElementById('rf-nat').value, doc_id:document.getElementById('rf-doc').value.trim(), guests:+document.getElementById('rf-guests').value, checkin, checkout, channel:document.getElementById('rf-channel').value, status:document.getElementById('rf-status').value, price:parseFloat(document.getElementById('rf-price').value)||0, commission:parseFloat(document.getElementById('rf-commission').value)||0, sef_reported:!!document.getElementById('rf-sef').value, room:document.getElementById('rf-room').value.trim(), notes:document.getElementById('rf-notes').value };
   try {
     id ? await api.updateReservation(id,d) : await api.createReservation(d);
     closeModal(); await navigate('reservations'); toastMsg(id?'Reserva atualizada':'Reserva criada');

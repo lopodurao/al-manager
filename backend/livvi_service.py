@@ -36,12 +36,33 @@ async def _get_token() -> str:
         return _cached_token["token"]
 
 
+async def get_door_ids_for_room(room: str, settings: dict) -> list[str]:
+    """
+    Resolve door IDs for a given room name from settings.
+    Settings key: livvi_rooms = JSON like {"Quarto Verde": "27462", "Quarto Vermelho": "27463,27461"}
+    Falls back to LIVVI_DOOR_IDS env var if room not found or not configured.
+    """
+    import json
+    livvi_rooms_json = settings.get("livvi_rooms", "")
+    if livvi_rooms_json and room:
+        try:
+            mapping = json.loads(livvi_rooms_json)
+            if room in mapping:
+                return [d.strip() for d in mapping[room].split(",") if d.strip()]
+        except Exception:
+            pass
+    # Fallback: use default door IDs from env
+    return [d.strip() for d in LIVVI_DOOR_IDS.split(",") if d.strip()]
+
+
 async def create_booking(
     reservation_id: str,
     guest_name: str,
     guest_email: str,
     checkin: str,    # "YYYY-MM-DD"
     checkout: str,   # "YYYY-MM-DD"
+    room: str = "",
+    settings: dict | None = None,
 ) -> dict | None:
     """Create a Livvi booking and return PIN code for the guest."""
     if not LIVVI_CLIENT_ID or not LIVVI_CLIENT_SECRET:
@@ -58,8 +79,8 @@ async def create_booking(
         surname = name_parts[0].strip()
         first   = name_parts[1].strip() if len(name_parts) > 1 else surname
 
-        # doorIds must be ROOM/GENERIC/AMENITY type — MAIN and STAFF doors not allowed in v2
-        door_ids = [d.strip() for d in LIVVI_DOOR_IDS.split(",") if d.strip()]
+        # doorIds: from room mapping in settings, or fallback to env var
+        door_ids = await get_door_ids_for_room(room, settings or {})
 
         params = [
             ("siteId", LIVVI_SITE_ID),

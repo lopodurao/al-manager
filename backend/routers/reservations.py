@@ -62,6 +62,8 @@ async def create_reservation(data: schemas.ReservationCreate, db: Session = Depe
             guest_email=r.guest_email or "",
             checkin=r.checkin,
             checkout=r.checkout,
+            room=r.room or "",
+            settings=settings,
         )
         if livvi:
             r.livvi_booking_id = livvi.get("booking_id", "")

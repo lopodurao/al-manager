@@ -67,6 +67,7 @@ def _run_migrations():
     migrations = [
         "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS livvi_booking_id VARCHAR DEFAULT ''",
         "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS access_pin VARCHAR DEFAULT ''",
+        "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS room VARCHAR DEFAULT ''",
     ]
     with engine.connect() as conn:
         for sql in migrations:

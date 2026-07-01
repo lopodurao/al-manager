@@ -23,6 +23,15 @@ async function renderSettings() {
   </div>
 </div>
 <div class="card mb-4">
+  <div class="card-title" style="margin-bottom:16px">🔒 Livvi — Mapeamento Quartos → Portas</div>
+  <p style="font-size:13px;color:var(--gray-500);margin-bottom:12px">
+    Define quais as portas Livvi que cada quarto/unidade dá acesso. O PIN gerado será específico para essas portas.<br>
+    IDs das tuas portas: <strong>27461</strong> Entrada Principal · <strong>27462</strong> Quarto Verde · <strong>27463</strong> Quarto Vermelho · <strong>27464</strong> Kitchennet
+  </p>
+  <div id="livvi-rooms-list">${_renderLivviRooms(s.livvi_rooms||'{}')}</div>
+  <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="addLivviRoom()">+ Adicionar quarto</button>
+</div>
+<div class="card mb-4">
   <div class="card-title" style="margin-bottom:16px">SEF — Credenciais SIBA</div>
   <div class="form-row">
     <div class="form-group"><label>Utilizador SIBA</label><input id="s-sefuser" value="${escHtml(s.sefUser||'')}"></div>
@@ -48,8 +57,52 @@ async function renderSettings() {
 </div>`;
 }
 
+function _renderLivviRooms(json) {
+  let mapping = {};
+  try { mapping = JSON.parse(json); } catch {}
+  const rows = Object.entries(mapping).map(([room, doors], i) => `
+    <div class="form-row" id="livvi-row-${i}" style="align-items:center;gap:8px;margin-bottom:8px">
+      <div class="form-group" style="margin:0;flex:1"><input placeholder="Nome do quarto (ex: Quarto Verde)" value="${escHtml(room)}" class="livvi-room-name" data-i="${i}"></div>
+      <div style="font-size:18px;color:var(--gray-400)">→</div>
+      <div class="form-group" style="margin:0;flex:1"><input placeholder="IDs das portas separados por vírgula (ex: 27462,27461)" value="${escHtml(doors)}" class="livvi-room-doors" data-i="${i}"></div>
+      <button class="btn btn-sm btn-danger" onclick="removeLivviRoom(${i})" style="flex-shrink:0">✕</button>
+    </div>`).join('');
+  return rows || '<div style="font-size:13px;color:var(--gray-400);padding:8px 0">Nenhum quarto configurado ainda.</div>';
+}
+
+function addLivviRoom() {
+  const list = document.getElementById('livvi-rooms-list');
+  const i = list.querySelectorAll('.form-row').length;
+  const div = document.createElement('div');
+  div.className = 'form-row';
+  div.id = `livvi-row-${i}`;
+  div.style.cssText = 'align-items:center;gap:8px;margin-bottom:8px';
+  div.innerHTML = `
+    <div class="form-group" style="margin:0;flex:1"><input placeholder="Nome do quarto (ex: Quarto Vermelho)" class="livvi-room-name" data-i="${i}"></div>
+    <div style="font-size:18px;color:var(--gray-400)">→</div>
+    <div class="form-group" style="margin:0;flex:1"><input placeholder="IDs das portas (ex: 27463,27461)" class="livvi-room-doors" data-i="${i}"></div>
+    <button class="btn btn-sm btn-danger" onclick="this.closest('.form-row').remove()" style="flex-shrink:0">✕</button>`;
+  list.appendChild(div);
+}
+
+function removeLivviRoom(i) {
+  document.getElementById(`livvi-row-${i}`)?.remove();
+}
+
+function _collectLivviRooms() {
+  const names = document.querySelectorAll('.livvi-room-name');
+  const doors = document.querySelectorAll('.livvi-room-doors');
+  const mapping = {};
+  names.forEach((n, i) => {
+    const name = n.value.trim();
+    const door = doors[i]?.value.trim();
+    if (name && door) mapping[name] = door;
+  });
+  return JSON.stringify(mapping);
+}
+
 async function doSaveSettings() {
-  const d={ ownerName:document.getElementById('s-name').value.trim(), ownerNIF:document.getElementById('s-nif').value.trim(), ownerEmail:document.getElementById('s-email').value.trim(), ownerPhone:document.getElementById('s-phone').value.trim(), alLicense:document.getElementById('s-al').value.trim(), checkinTime:document.getElementById('s-checkin').value, checkoutTime:document.getElementById('s-checkout').value, cleaningFee:document.getElementById('s-cleaning').value, accessCode:document.getElementById('s-code').value.trim(), keyLocation:document.getElementById('s-key').value.trim(), sefUser:document.getElementById('s-sefuser').value.trim(), sefPass:document.getElementById('s-sefpass').value };
+  const d={ ownerName:document.getElementById('s-name').value.trim(), ownerNIF:document.getElementById('s-nif').value.trim(), ownerEmail:document.getElementById('s-email').value.trim(), ownerPhone:document.getElementById('s-phone').value.trim(), alLicense:document.getElementById('s-al').value.trim(), checkinTime:document.getElementById('s-checkin').value, checkoutTime:document.getElementById('s-checkout').value, cleaningFee:document.getElementById('s-cleaning').value, accessCode:document.getElementById('s-code').value.trim(), keyLocation:document.getElementById('s-key').value.trim(), sefUser:document.getElementById('s-sefuser').value.trim(), sefPass:document.getElementById('s-sefpass').value, livvi_rooms:_collectLivviRooms() };
   try { await api.updateSettings(d); Object.assign(cache.settings,d); toastMsg('Configurações guardadas'); }
   catch(e){ toastMsg('Erro: '+e.message); }
 }
