@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: al-manager
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DB_PATH
+        value: /opt/render/project/src/al_manager.db
+      - key: BACKUP_DIR
+        value: /opt/render/project/src/backups
+      - key: TOKEN_EXPIRE_MINUTES
+        value: "1440"
