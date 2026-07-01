@@ -109,7 +109,7 @@ async def import_ical_url(prop_id: str, channel: str, url: str, db: Session = De
             resp.raise_for_status()
         except Exception as e:
             raise HTTPException(502, f"Erro ao obter calendário: {e}")
-    new_res = _parse_ical(resp.text, channel, url, db)
+    new_res = _parse_ical(resp.text, prop_id, channel, db)
     _send_confirmation_emails(new_res, db)
     return {"imported": len(new_res)}
 
