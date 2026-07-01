@@ -19,6 +19,9 @@ def list_reservations(
     if status:  q = q.filter(models.Reservation.status == status)
     return q.order_by(models.Reservation.checkin.desc()).all()
 
+import logging as _logging
+_log = _logging.getLogger(__name__)
+
 def _check_overlap(db, prop_id: str, checkin: str, checkout: str, exclude_id: str = None):
     """Raise 409 if there's a non-cancelled reservation overlapping these dates."""
     q = db.query(models.Reservation).filter(
@@ -31,7 +34,9 @@ def _check_overlap(db, prop_id: str, checkin: str, checkout: str, exclude_id: st
         q = q.filter(models.Reservation.id != exclude_id)
     conflict = q.first()
     if conflict:
-        raise HTTPException(409, f"Já existe uma reserva para esta propriedade de {conflict.checkin} a {conflict.checkout} ({conflict.guest_name})")
+        msg = f"Já existe uma reserva de {conflict.checkin} a {conflict.checkout} ({conflict.guest_name})"
+        _log.warning(f"Sobreposição detectada: prop={prop_id} {checkin}→{checkout} vs {conflict.checkin}→{conflict.checkout} ({conflict.guest_name})")
+        raise HTTPException(409, msg)
 
 async def _livvi_and_email_bg(reservation_id: str):
     """Background task: create Livvi PIN and send confirmation email."""
@@ -58,9 +63,12 @@ async def _livvi_and_email_bg(reservation_id: str):
         if r.guest_email:
             rows = db.query(models.Settings).all()
             settings = {row.key: row.value for row in rows}
-            send_booking_confirmation(r, prop, settings, access_pin=r.access_pin or "")
+            sent = send_booking_confirmation(r, prop, settings, access_pin=r.access_pin or "")
+            logger.info(f"Email confirmação {'ENVIADO' if sent else 'NÃO ENVIADO (verifca SMTP_USER/SMTP_PASS nos env vars do Render)'} → {r.guest_email}")
+        else:
+            logger.info(f"Reserva {reservation_id}: sem email do hóspede — confirmação não enviada")
     except Exception as e:
-        logger.error(f"Erro background Livvi/email para {reservation_id}: {e}")
+        logger.error(f"Erro background Livvi/email para {reservation_id}: {e}", exc_info=True)
     finally:
         db.close()
 

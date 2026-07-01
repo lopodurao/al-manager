@@ -157,7 +157,14 @@ async function doSaveReservation(id) {
   } catch(e) {
     btn.disabled = false;
     btn.textContent = 'Guardar';
-    if (errBox) { errBox.textContent = '⚠ ' + e.message; errBox.style.display = 'block'; }
+    console.error('Erro ao guardar reserva:', e);
+    if (errBox) {
+      errBox.textContent = '⚠ ' + e.message;
+      errBox.style.display = 'block';
+      errBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      alert('⚠ ' + e.message);
+    }
   }
 }
 async function deleteReservation(id) {

@@ -31,6 +31,12 @@ async function renderSettings() {
   <div style="font-size:12.5px;color:var(--gray-500)">⚠ Guardado de forma encriptada no servidor.</div>
 </div>
 <div class="card mb-4">
+  <div class="card-title" style="margin-bottom:16px">Email — Diagnóstico</div>
+  <div style="font-size:13px;color:var(--gray-500);margin-bottom:12px">O email é enviado via Gmail SMTP. As credenciais (SMTP_USER, SMTP_PASS) têm de estar configuradas nos <strong>Environment Variables</strong> do Render.</div>
+  <button class="btn btn-outline" onclick="doTestEmail()" id="test-email-btn">✉ Enviar email de teste</button>
+  <div id="test-email-result" style="margin-top:10px;font-size:13px;display:none"></div>
+</div>
+<div class="card mb-4">
   <div class="card-title" style="margin-bottom:16px">Dados &amp; Backup</div>
   <div style="display:flex;gap:10px;flex-wrap:wrap">
     <button class="btn btn-outline" onclick="doExportBackup()">↓ Exportar backup JSON</button>
@@ -115,6 +121,25 @@ function doImportBackup(input) {
     } catch(err){ alert('Erro: '+err.message); }
   };
   reader.readAsText(file);
+}
+
+async function doTestEmail() {
+  const btn = document.getElementById('test-email-btn');
+  const res = document.getElementById('test-email-result');
+  btn.disabled = true; btn.textContent = '⏳ A enviar…';
+  res.style.display = 'none';
+  try {
+    const r = await apiFetch('/api/settings/test-email', { method: 'POST' });
+    res.style.display = 'block';
+    res.style.color = '#065f46';
+    res.textContent = `✓ Email enviado para ${r.sent_to} — verifica a caixa de entrada`;
+  } catch(e) {
+    res.style.display = 'block';
+    res.style.color = '#dc2626';
+    res.textContent = '✗ ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = '✉ Enviar email de teste';
+  }
 }
 
 async function doResetData() {

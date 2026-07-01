@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from .. import models, schemas, auth
 from ..database import get_db
-import json
+import json, os
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 Auth = Depends(auth.get_current_user)
@@ -50,6 +50,31 @@ def backup(db: Session = Depends(get_db), _=Auth):
         "ota_channels":      rows(models.OtaChannel),
         "settings":          {r.key: r.value for r in rows_settings},
     }
+
+@router.post("/test-email")
+def test_email(db: Session = Depends(get_db), _=Auth):
+    """Send a test email to verify SMTP configuration."""
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_pass = os.getenv("SMTP_PASS", "")
+    if not smtp_user or not smtp_pass:
+        raise HTTPException(400, "SMTP_USER e SMTP_PASS não configurados nos env vars do Render")
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "✓ Teste AL Manager — SMTP a funcionar"
+        msg["From"]    = f"AL Manager <{smtp_user}>"
+        msg["To"]      = smtp_user
+        msg.attach(MIMEText("<p>Email de teste do AL Manager. SMTP está a funcionar correctamente.</p>", "html", "utf-8"))
+        with smtplib.SMTP("smtp.gmail.com", 587) as s:
+            s.ehlo(); s.starttls()
+            s.login(smtp_user, smtp_pass)
+            s.sendmail(smtp_user, smtp_user, msg.as_string())
+        return {"ok": True, "sent_to": smtp_user}
+    except Exception as e:
+        raise HTTPException(500, f"Erro SMTP: {e}")
+
 
 @router.post("/restore")
 def restore(data: schemas.BackupData, db: Session = Depends(get_db), _=Auth):

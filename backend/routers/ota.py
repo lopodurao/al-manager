@@ -50,6 +50,16 @@ def _parse_ical(text: str, prop_id: str, channel: str, db: Session) -> list:
         checkout = f"{dtend[:4]}-{dtend[4:6]}-{dtend[6:8]}"
         if db.query(models.Reservation).filter(models.Reservation.ical_uid == uid).first():
             continue
+        # Skip if this would overlap with an existing non-cancelled reservation
+        conflict = db.query(models.Reservation).filter(
+            models.Reservation.prop_id == prop_id,
+            models.Reservation.status != "cancelled",
+            models.Reservation.checkin < checkout,
+            models.Reservation.checkout > checkin,
+        ).first()
+        if conflict:
+            logger.warning(f"iCal: ignorada sobreposição {checkin}→{checkout} (uid={uid}) com {conflict.guest_name} {conflict.checkin}→{conflict.checkout}")
+            continue
         # Extract email from DESCRIPTION if present
         email = ""
         email_match = re.search(r"[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}", desc or "")
