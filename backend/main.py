@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    _run_migrations()
     _seed_ota_channels()
     _seed_default_messages()
     scheduler = AsyncIOScheduler()
@@ -59,6 +60,21 @@ if os.path.isdir(frontend_path):
         # API routes take priority (handled above)
         index = os.path.join(frontend_path, "index.html")
         return FileResponse(index)
+
+# ── Schema migrations (ADD COLUMN IF NOT EXISTS) ──
+def _run_migrations():
+    """Add new columns to existing tables without dropping data."""
+    migrations = [
+        "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS livvi_booking_id VARCHAR DEFAULT ''",
+        "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS access_pin VARCHAR DEFAULT ''",
+    ]
+    with engine.connect() as conn:
+        for sql in migrations:
+            try:
+                conn.execute(__import__("sqlalchemy").text(sql))
+                conn.commit()
+            except Exception as e:
+                logger.warning(f"Migration skipped ({e})")
 
 # ── Seed helpers ──
 def _seed_ota_channels():
