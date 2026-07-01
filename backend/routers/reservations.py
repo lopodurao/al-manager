@@ -19,12 +19,27 @@ def list_reservations(
     if status:  q = q.filter(models.Reservation.status == status)
     return q.order_by(models.Reservation.checkin.desc()).all()
 
+def _check_overlap(db, prop_id: str, checkin: str, checkout: str, exclude_id: str = None):
+    """Raise 409 if there's a non-cancelled reservation overlapping these dates."""
+    q = db.query(models.Reservation).filter(
+        models.Reservation.prop_id == prop_id,
+        models.Reservation.status != "cancelled",
+        models.Reservation.checkin < checkout,
+        models.Reservation.checkout > checkin,
+    )
+    if exclude_id:
+        q = q.filter(models.Reservation.id != exclude_id)
+    conflict = q.first()
+    if conflict:
+        raise HTTPException(409, f"Já existe uma reserva para esta propriedade de {conflict.checkin} a {conflict.checkout} ({conflict.guest_name})")
+
 @router.post("", response_model=schemas.ReservationOut, status_code=201)
 async def create_reservation(data: schemas.ReservationCreate, db: Session = Depends(get_db), _=Auth):
     if not db.query(models.Property).filter(models.Property.id == data.prop_id).first():
         raise HTTPException(400, "Propriedade inválida")
     if data.checkout <= data.checkin:
         raise HTTPException(400, "Check-out deve ser depois do check-in")
+    _check_overlap(db, data.prop_id, data.checkin, data.checkout)
     r = models.Reservation(id=str(uuid.uuid4()), **data.model_dump())
     db.add(r)
     # Auto-create transactions
@@ -89,6 +104,8 @@ async def update_reservation(rid: str, data: schemas.ReservationUpdate, db: Sess
     r = db.query(models.Reservation).filter(models.Reservation.id == rid).first()
     if not r: raise HTTPException(404, "Reserva não encontrada")
     was_active = r.status != "cancelled"
+    if data.status != "cancelled":
+        _check_overlap(db, data.prop_id, data.checkin, data.checkout, exclude_id=rid)
     for k, v in data.model_dump().items():
         setattr(r, k, v)
     db.commit(); db.refresh(r)
