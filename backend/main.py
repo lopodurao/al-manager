@@ -22,6 +22,7 @@ async def lifespan(app: FastAPI):
     _seed_default_messages()
     scheduler = AsyncIOScheduler()
     scheduler.add_job(_daily_backup, "cron", hour=3, minute=0)
+    scheduler.add_job(ota.auto_sync_all, "interval", minutes=30)
     scheduler.start()
     logger.info("AL Manager started")
     yield

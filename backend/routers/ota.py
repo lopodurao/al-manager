@@ -3,52 +3,85 @@ from sqlalchemy.orm import Session
 from typing import List
 from datetime import date
 from .. import models, schemas, auth
-from ..database import get_db
-import httpx, uuid, re
+from ..database import get_db, SessionLocal
+import httpx, uuid, re, logging
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/ota", tags=["ota"])
 Auth = Depends(auth.get_current_user)
+
 
 @router.get("", response_model=List[schemas.OtaChannelOut])
 def list_channels(db: Session = Depends(get_db), _=Auth):
     return db.query(models.OtaChannel).all()
+
 
 @router.put("/{cid}", response_model=schemas.OtaChannelOut)
 def update_channel(cid: str, data: schemas.OtaChannelUpdate, db: Session = Depends(get_db), _=Auth):
     ch = db.query(models.OtaChannel).filter(models.OtaChannel.id == cid).first()
     if not ch: raise HTTPException(404)
     ch.ical_url = data.ical_url
-    ch.active = data.active
+    ch.active   = data.active
     db.commit(); db.refresh(ch)
     return ch
 
-def _parse_ical(text: str, prop_id: str, channel: str, db: Session) -> int:
+
+def _get_settings(db: Session) -> dict:
+    rows = db.query(models.Settings).all()
+    return {r.key: r.value for r in rows}
+
+
+def _parse_ical(text: str, prop_id: str, channel: str, db: Session) -> list:
+    """Parse iCal and return list of newly created Reservation objects."""
     events = text.split("BEGIN:VEVENT")[1:]
-    imported = 0
+    new_reservations = []
     for ev in events:
         def get(key):
             m = re.search(rf"{key}[^:]*:([^\r\n]+)", ev)
             return m.group(1).strip() if m else ""
         dtstart = get("DTSTART").replace("T", "").replace("Z", "")[:8]
-        dtend   = get("DTEND").replace("T", "").replace("Z", "")[:8]
+        dtend   = get("DTEND").replace("T",   "").replace("Z", "")[:8]
         summary = get("SUMMARY")
         uid     = get("UID")
+        desc    = get("DESCRIPTION")
         if len(dtstart) < 8 or len(dtend) < 8:
             continue
         checkin  = f"{dtstart[:4]}-{dtstart[4:6]}-{dtstart[6:8]}"
         checkout = f"{dtend[:4]}-{dtend[4:6]}-{dtend[6:8]}"
         if db.query(models.Reservation).filter(models.Reservation.ical_uid == uid).first():
             continue
-        db.add(models.Reservation(
+        # Extract email from DESCRIPTION if present
+        email = ""
+        email_match = re.search(r"[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}", desc or "")
+        if email_match:
+            email = email_match.group(0)
+        res = models.Reservation(
             id=str(uuid.uuid4()), prop_id=prop_id,
             guest_name=summary or "Reserva importada",
+            guest_email=email,
             checkin=checkin, checkout=checkout,
             channel=channel, status="confirmed",
             ical_uid=uid, notes="Importado via iCal"
-        ))
-        imported += 1
+        )
+        db.add(res)
+        new_reservations.append(res)
     db.commit()
-    return imported
+    return new_reservations
+
+
+def _send_confirmation_emails(new_reservations: list, db: Session):
+    """Send booking confirmation email for each new reservation that has an email."""
+    from ..email_service import send_booking_confirmation
+    settings = _get_settings(db)
+    for res in new_reservations:
+        if not res.guest_email:
+            logger.info(f"Reserva {res.id} sem email — confirmação não enviada")
+            continue
+        prop = db.query(models.Property).filter(models.Property.id == res.prop_id).first()
+        ok = send_booking_confirmation(res, prop, settings)
+        if ok:
+            logger.info(f"Confirmação enviada para {res.guest_email} ({res.guest_name})")
+
 
 @router.post("/{cid}/sync")
 async def sync_channel(cid: str, prop_id: str, db: Session = Depends(get_db), _=Auth):
@@ -61,10 +94,12 @@ async def sync_channel(cid: str, prop_id: str, db: Session = Depends(get_db), _=
             resp.raise_for_status()
         except Exception as e:
             raise HTTPException(502, f"Erro ao obter calendário: {e}")
-    n = _parse_ical(resp.text, prop_id, ch.slug, db)
+    new_res = _parse_ical(resp.text, prop_id, ch.slug, db)
+    _send_confirmation_emails(new_res, db)
     ch.last_sync = str(date.today())
     db.commit()
-    return {"imported": n}
+    return {"imported": len(new_res)}
+
 
 @router.post("/import-ical")
 async def import_ical_url(prop_id: str, channel: str, url: str, db: Session = Depends(get_db), _=Auth):
@@ -74,8 +109,10 @@ async def import_ical_url(prop_id: str, channel: str, url: str, db: Session = De
             resp.raise_for_status()
         except Exception as e:
             raise HTTPException(502, f"Erro ao obter calendário: {e}")
-    n = _parse_ical(resp.text, prop_id, channel, db)
-    return {"imported": n}
+    new_res = _parse_ical(resp.text, channel, url, db)
+    _send_confirmation_emails(new_res, db)
+    return {"imported": len(new_res)}
+
 
 @router.get("/export-ical")
 def export_ical(prop_id: str = None, db: Session = Depends(get_db), _=Auth):
@@ -99,3 +136,32 @@ def export_ical(prop_id: str = None, db: Session = Depends(get_db), _=Auth):
         ]
     lines.append("END:VCALENDAR")
     return PlainTextResponse("\r\n".join(lines), media_type="text/calendar")
+
+
+async def auto_sync_all():
+    """Scheduled job: sync all active OTA channels for all properties."""
+    db = SessionLocal()
+    try:
+        channels = db.query(models.OtaChannel).filter(
+            models.OtaChannel.active == True,
+            models.OtaChannel.ical_url != ""
+        ).all()
+        properties = db.query(models.Property).all()
+        if not channels or not properties:
+            return
+        async with httpx.AsyncClient(follow_redirects=True, timeout=20) as client:
+            for ch in channels:
+                for prop in properties:
+                    try:
+                        resp = await client.get(ch.ical_url)
+                        resp.raise_for_status()
+                        new_res = _parse_ical(resp.text, prop.id, ch.slug, db)
+                        if new_res:
+                            _send_confirmation_emails(new_res, db)
+                            logger.info(f"Auto-sync {ch.name}/{prop.name}: {len(new_res)} novas reservas")
+                        ch.last_sync = str(date.today())
+                        db.commit()
+                    except Exception as e:
+                        logger.error(f"Auto-sync erro {ch.name}: {e}")
+    finally:
+        db.close()
