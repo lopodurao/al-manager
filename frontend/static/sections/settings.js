@@ -23,15 +23,6 @@ async function renderSettings() {
   </div>
 </div>
 <div class="card mb-4">
-  <div class="card-title" style="margin-bottom:16px">🔒 Livvi — Mapeamento Quartos → Portas</div>
-  <p style="font-size:13px;color:var(--gray-500);margin-bottom:12px">
-    Define quais as portas Livvi que cada quarto/unidade dá acesso. O PIN gerado será específico para essas portas.<br>
-    IDs das tuas portas: <strong>27461</strong> Entrada Principal · <strong>27462</strong> Quarto Verde · <strong>27463</strong> Quarto Vermelho · <strong>27464</strong> Kitchennet
-  </p>
-  <div id="livvi-rooms-list">${_renderLivviRooms(s.livvi_rooms||'{}')}</div>
-  <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="addLivviRoom()">+ Adicionar quarto</button>
-</div>
-<div class="card mb-4">
   <div class="card-title" style="margin-bottom:16px">SEF — Credenciais SIBA</div>
   <div class="form-row">
     <div class="form-group"><label>Utilizador SIBA</label><input id="s-sefuser" value="${escHtml(s.sefUser||'')}"></div>
@@ -102,7 +93,7 @@ function _collectLivviRooms() {
 }
 
 async function doSaveSettings() {
-  const d={ ownerName:document.getElementById('s-name').value.trim(), ownerNIF:document.getElementById('s-nif').value.trim(), ownerEmail:document.getElementById('s-email').value.trim(), ownerPhone:document.getElementById('s-phone').value.trim(), alLicense:document.getElementById('s-al').value.trim(), checkinTime:document.getElementById('s-checkin').value, checkoutTime:document.getElementById('s-checkout').value, cleaningFee:document.getElementById('s-cleaning').value, accessCode:document.getElementById('s-code').value.trim(), keyLocation:document.getElementById('s-key').value.trim(), sefUser:document.getElementById('s-sefuser').value.trim(), sefPass:document.getElementById('s-sefpass').value, livvi_rooms:_collectLivviRooms() };
+  const d={ ownerName:document.getElementById('s-name').value.trim(), ownerNIF:document.getElementById('s-nif').value.trim(), ownerEmail:document.getElementById('s-email').value.trim(), ownerPhone:document.getElementById('s-phone').value.trim(), alLicense:document.getElementById('s-al').value.trim(), checkinTime:document.getElementById('s-checkin').value, checkoutTime:document.getElementById('s-checkout').value, cleaningFee:document.getElementById('s-cleaning').value, accessCode:document.getElementById('s-code').value.trim(), keyLocation:document.getElementById('s-key').value.trim(), sefUser:document.getElementById('s-sefuser').value.trim(), sefPass:document.getElementById('s-sefpass').value };
   try { await api.updateSettings(d); Object.assign(cache.settings,d); toastMsg('Configurações guardadas'); }
   catch(e){ toastMsg('Erro: '+e.message); }
 }

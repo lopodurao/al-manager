@@ -56,14 +56,15 @@ async def create_reservation(data: schemas.ReservationCreate, db: Session = Depe
         from .. import livvi_service
         from ..email_service import send_booking_confirmation
         from ..database import SessionLocal
+        prop_obj = db.query(models.Property).filter(models.Property.id == r.prop_id).first()
+        door_ids = [d.strip() for d in (prop_obj.livvi_door_ids or "").split(",") if d.strip()] if prop_obj else []
         livvi = await livvi_service.create_booking(
             reservation_id=r.id,
             guest_name=r.guest_name,
             guest_email=r.guest_email or "",
             checkin=r.checkin,
             checkout=r.checkout,
-            room=r.room or "",
-            settings=settings,
+            door_ids=door_ids or None,
         )
         if livvi:
             r.livvi_booking_id = livvi.get("booking_id", "")

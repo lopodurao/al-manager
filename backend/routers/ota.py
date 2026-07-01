@@ -76,14 +76,15 @@ async def _livvi_and_email(new_reservations: list, db: Session):
     settings = _get_settings(db)
     for res in new_reservations:
         # Create Livvi booking for PIN code
+        prop = db.query(models.Property).filter(models.Property.id == res.prop_id).first()
+        door_ids = [d.strip() for d in (prop.livvi_door_ids or "").split(",") if d.strip()] if prop else []
         livvi = await livvi_service.create_booking(
             reservation_id=res.id,
             guest_name=res.guest_name,
             guest_email=res.guest_email or "",
             checkin=res.checkin,
             checkout=res.checkout,
-            room=res.room or "",
-            settings=settings,
+            door_ids=door_ids or None,
         )
         pin = ""
         if livvi:
@@ -96,8 +97,8 @@ async def _livvi_and_email(new_reservations: list, db: Session):
         if not res.guest_email:
             logger.info(f"Reserva {res.id} sem email — confirmação não enviada")
             continue
-        prop = db.query(models.Property).filter(models.Property.id == res.prop_id).first()
-        ok = send_booking_confirmation(res, prop, settings, access_pin=pin)
+        prop_obj = db.query(models.Property).filter(models.Property.id == res.prop_id).first()
+        ok = send_booking_confirmation(res, prop_obj, settings, access_pin=pin)
         if ok:
             logger.info(f"Confirmação enviada para {res.guest_email} ({res.guest_name})")
 

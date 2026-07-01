@@ -30,6 +30,7 @@ class PropertyCreate(BaseModel):
     max_guests: int = 4
     license: str = ""
     color: str = "#667eea"
+    livvi_door_ids: str = ""
     notes: str = ""
 
 class PropertyOut(PropertyCreate):

@@ -74,6 +74,13 @@ function propertyForm(p) {
     <div class="form-group"><label>WC</label><input type="number" id="pf-baths" value="${p?.baths||1}" min="1"></div>
     <div class="form-group"><label>Hóspedes máx.</label><input type="number" id="pf-guests" value="${p?.max_guests||4}" min="1"></div>
   </div>
+  <div class="form-group">
+    <label>🔒 Fechaduras Livvi (IDs separados por vírgula)</label>
+    <input id="pf-livvi" value="${escHtml(p?.livvi_door_ids||'')}" placeholder="ex: 27461,27463  (Entrada Principal + Quarto Vermelho)">
+    <div style="font-size:12px;color:var(--gray-500);margin-top:4px">
+      27461 Entrada Principal · 27462 Quarto Verde · 27463 Quarto Vermelho · 27464 Kitchennet
+    </div>
+  </div>
   <div class="form-group"><label>Notas</label><textarea id="pf-notes">${escHtml(p?.notes||'')}</textarea></div>
   <div class="form-actions">
     <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
@@ -81,7 +88,7 @@ function propertyForm(p) {
   </div>`;
 }
 async function doSaveProperty(id) {
-  const d = { name:document.getElementById('pf-name').value.trim(), address:document.getElementById('pf-addr').value.trim(), type:document.getElementById('pf-type').value, license:document.getElementById('pf-license').value.trim(), color:document.getElementById('pf-color').value, rooms:+document.getElementById('pf-rooms').value, beds:+document.getElementById('pf-beds').value, baths:+document.getElementById('pf-baths').value, max_guests:+document.getElementById('pf-guests').value, notes:document.getElementById('pf-notes').value };
+  const d = { name:document.getElementById('pf-name').value.trim(), address:document.getElementById('pf-addr').value.trim(), type:document.getElementById('pf-type').value, license:document.getElementById('pf-license').value.trim(), color:document.getElementById('pf-color').value, rooms:+document.getElementById('pf-rooms').value, beds:+document.getElementById('pf-beds').value, baths:+document.getElementById('pf-baths').value, max_guests:+document.getElementById('pf-guests').value, livvi_door_ids:document.getElementById('pf-livvi').value.trim(), notes:document.getElementById('pf-notes').value };
   if (!d.name) { alert('Nome obrigatório'); return; }
   try {
     id ? await api.updateProperty(id, d) : await api.createProperty(d);
