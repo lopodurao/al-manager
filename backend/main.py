@@ -24,6 +24,7 @@ async def lifespan(app: FastAPI):
     scheduler = AsyncIOScheduler()
     scheduler.add_job(_daily_backup, "cron", hour=3, minute=0)
     scheduler.add_job(ota.auto_sync_all, "interval", minutes=30)
+    scheduler.add_job(_self_ping, "interval", minutes=10)
     scheduler.start()
     logger.info("AL Manager started")
     yield
@@ -60,6 +61,23 @@ if os.path.isdir(frontend_path):
         # API routes take priority (handled above)
         index = os.path.join(frontend_path, "index.html")
         return FileResponse(index)
+
+@app.get("/health", include_in_schema=False)
+def health():
+    return {"ok": True}
+
+async def _self_ping():
+    """Ping próprio a cada 10 min para evitar cold start no Render free tier."""
+    import httpx
+    url = os.getenv("RENDER_EXTERNAL_URL", "")
+    if not url:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            await c.get(f"{url}/health")
+        logger.info("Self-ping OK")
+    except Exception as e:
+        logger.warning(f"Self-ping falhou: {e}")
 
 # ── Schema migrations (ADD COLUMN IF NOT EXISTS) ──
 def _run_migrations():
