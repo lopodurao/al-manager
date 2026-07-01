@@ -12,6 +12,9 @@ LIVVI_AUTH_URL      = "https://api.athos.vingcard.com/corp/auth/m2m"
 LIVVI_API_BASE      = "https://api.athos.vingcard.com"
 
 _cached_token: dict = {}
+_cached_door_types: dict = {}  # doorId -> type, cached to avoid repeated API calls
+
+VALID_DOOR_TYPES = {"ROOM", "GENERIC", "AMENITY"}
 
 
 async def _get_token() -> str:
@@ -34,6 +37,31 @@ async def _get_token() -> str:
             "expires_at": now + data.get("expires_in", 43200),
         }
         return _cached_token["token"]
+
+
+async def _filter_valid_doors(token: str, door_ids: list[str]) -> list[str]:
+    """Remove MAIN/STAFF doors — v2 booking only accepts ROOM/GENERIC/AMENITY."""
+    global _cached_door_types
+    uncached = [d for d in door_ids if d not in _cached_door_types]
+    if uncached:
+        try:
+            async with httpx.AsyncClient(timeout=10) as c:
+                r = await c.get(
+                    f"{LIVVI_API_BASE}/corp/site/doors?siteId={LIVVI_SITE_ID}",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                for door in r.json().get("doors", []):
+                    _cached_door_types[str(door["id"])] = door.get("doorType", "UNKNOWN")
+        except Exception as e:
+            logger.warning(f"Livvi: não foi possível verificar tipos de portas: {e}")
+            return door_ids  # proceed as-is if lookup fails
+
+    valid = [d for d in door_ids if _cached_door_types.get(d, "UNKNOWN") in VALID_DOOR_TYPES]
+    skipped = [d for d in door_ids if d not in valid]
+    if skipped:
+        skipped_names = [f"{d}({_cached_door_types.get(d,'?')})" for d in skipped]
+        logger.warning(f"Livvi: portas ignoradas (tipo inválido para booking): {skipped_names}")
+    return valid
 
 
 async def create_booking(
@@ -61,6 +89,12 @@ async def create_booking(
         # Use provided door_ids, or fall back to env var
         if not door_ids:
             door_ids = [d.strip() for d in LIVVI_DOOR_IDS.split(",") if d.strip()]
+
+        # v2 endpoint only accepts ROOM/GENERIC/AMENITY door types — filter automatically
+        door_ids = await _filter_valid_doors(token, door_ids)
+        if not door_ids:
+            logger.error("Livvi: nenhuma porta válida (ROOM/GENERIC/AMENITY) configurada na propriedade")
+            return None
 
         params = [
             ("siteId", LIVVI_SITE_ID),
