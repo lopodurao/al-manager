@@ -107,12 +107,12 @@ async def delete_booking(livvi_booking_id: str) -> bool:
         token = await _get_token()
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.post(
-                f"{LIVVI_API_BASE}/corp/site/v2/booking/delete",
+                f"{LIVVI_API_BASE}/corp/site/booking/delete",
                 headers={
                     "Authorization": f"Bearer {token}",
                     "Content-Type": "application/x-www-form-urlencoded",
                 },
-                content=urlencode([("siteId", LIVVI_SITE_ID), ("bookingId", livvi_booking_id)]).encode(),
+                content=urlencode([("siteId", LIVVI_SITE_ID), ("bookingId", int(livvi_booking_id))]).encode(),
             )
             return r.status_code == 200
     except Exception as e:
