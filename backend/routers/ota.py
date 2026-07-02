@@ -146,11 +146,26 @@ async def import_ical_url(prop_id: str, channel: str, url: str, db: Session = De
 
 @router.get("/export-ical")
 def export_ical(prop_id: str = None, db: Session = Depends(get_db), _=Auth):
+    """Authenticated export — used internally by the download button."""
+    return _build_ical_response(prop_id, db)
+
+
+@router.get("/calendar/{token}")
+def export_ical_public(token: str, prop_id: str = None, db: Session = Depends(get_db)):
+    """Public iCal feed — no auth, protected by secret token. Give this URL to Airbnb/Booking."""
+    row = db.query(models.Settings).filter(models.Settings.key == "icalToken").first()
+    if not row or row.value != token:
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse("Token inválido", status_code=403)
+    return _build_ical_response(prop_id, db)
+
+
+def _build_ical_response(prop_id, db):
     from fastapi.responses import PlainTextResponse
     q = db.query(models.Reservation).filter(models.Reservation.status != "cancelled")
     if prop_id:
         q = q.filter(models.Reservation.prop_id == prop_id)
-    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//AL Manager//PT", "CALSCALE:GREGORIAN"]
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//AL Manager//PT", "CALSCALE:GREGORIAN", "METHOD:PUBLISH"]
     for r in q.all():
         prop = db.query(models.Property).filter(models.Property.id == r.prop_id).first()
         ci = r.checkin.replace("-", "")
@@ -165,7 +180,7 @@ def export_ical(prop_id: str = None, db: Session = Depends(get_db), _=Auth):
             "END:VEVENT",
         ]
     lines.append("END:VCALENDAR")
-    return PlainTextResponse("\r\n".join(lines), media_type="text/calendar")
+    return PlainTextResponse("\r\n".join(lines), media_type="text/calendar; charset=utf-8")
 
 
 async def auto_sync_all():

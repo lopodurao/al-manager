@@ -21,6 +21,7 @@ async def lifespan(app: FastAPI):
     _run_migrations()
     _seed_ota_channels()
     _seed_default_messages()
+    _seed_ical_token()
     scheduler = AsyncIOScheduler()
     scheduler.add_job(_daily_backup, "cron", hour=3, minute=0)
     scheduler.add_job(ota.auto_sync_all, "interval", minutes=30)
@@ -137,6 +138,20 @@ def _seed_default_messages():
             db.commit()
     finally:
         db.close()
+
+def _seed_ical_token():
+    """Generate a random iCal secret token if not already set."""
+    from .database import SessionLocal
+    import uuid
+    db = SessionLocal()
+    try:
+        if not db.query(models.Settings).filter(models.Settings.key == "icalToken").first():
+            db.add(models.Settings(key="icalToken", value=str(uuid.uuid4()).replace("-", "")))
+            db.commit()
+            logger.info("iCal token gerado")
+    finally:
+        db.close()
+
 
 # ── Daily backup ──
 def _daily_backup():

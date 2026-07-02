@@ -43,10 +43,24 @@ async function renderOta() {
   </div>
 </div>
 <div class="card mt-4">
-  <div class="card-title" style="margin-bottom:12px">Exportar Calendário (.ics)</div>
-  <div class="form-row">
-    <div class="form-group"><label>Propriedade</label><select id="ical-export-prop"><option value="">Todas</option>${cache.properties.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div>
-    <div class="form-group" style="display:flex;align-items:flex-end"><a id="ical-export-link" class="btn btn-primary w-full" href="#" onclick="doExportIcal(event)">↓ Exportar .ics</a></div>
+  <div class="card-title" style="margin-bottom:4px">Exportar / Partilhar Calendário (.ics)</div>
+  <div style="font-size:12.5px;color:var(--gray-500);margin-bottom:14px">Usa o link público para ligar ao Airbnb, Booking.com, Google Calendar, etc. Não requer login.</div>
+  <div class="form-group"><label>Propriedade</label>
+    <select id="ical-export-prop" onchange="refreshIcalLink()">
+      <option value="">Todas as propriedades</option>
+      ${cache.properties.map(p=>`<option value="${p.id}">${escHtml(p.name)}</option>`).join('')}
+    </select>
+  </div>
+  <div class="form-group">
+    <label>Link público (para Airbnb / Booking.com)</label>
+    <div style="display:flex;gap:8px">
+      <input id="ical-public-url" readonly style="flex:1;background:#f9fafb;font-size:12px;cursor:text" value="${_buildIcalUrl(cache.settings.icalToken||'')}">
+      <button class="btn btn-outline" onclick="copyIcalLink()" style="white-space:nowrap">Copiar</button>
+    </div>
+    <div style="font-size:12px;color:var(--gray-500);margin-top:4px">No Airbnb: Calendário → Ligar outro calendário → cola este link</div>
+  </div>
+  <div class="form-actions" style="margin-top:8px">
+    <button class="btn btn-outline" onclick="doExportIcal(event)">↓ Descarregar .ics</button>
   </div>
 </div>`;
 }
@@ -112,8 +126,27 @@ function doImportFile() {
   reader.readAsText(file);
 }
 
+function _buildIcalUrl(token, propId) {
+  const base = window.location.origin;
+  const prop = propId || document.getElementById('ical-export-prop')?.value || '';
+  return base + '/api/ota/calendar/' + (token || '???') + (prop ? '?prop_id=' + prop : '');
+}
+
+function refreshIcalLink() {
+  const el = document.getElementById('ical-public-url');
+  if (el) el.value = _buildIcalUrl(cache.settings.icalToken || '');
+}
+
+function copyIcalLink() {
+  const el = document.getElementById('ical-public-url');
+  if (!el) return;
+  navigator.clipboard.writeText(el.value).then(() => toastMsg('Link copiado!')).catch(() => {
+    el.select(); document.execCommand('copy'); toastMsg('Link copiado!');
+  });
+}
+
 function doExportIcal(e) {
-  e.preventDefault();
-  const propId=document.getElementById('ical-export-prop').value;
-  window.open(api.exportIcalUrl(propId),'_blank');
+  if (e) e.preventDefault();
+  const propId = document.getElementById('ical-export-prop')?.value || '';
+  window.open(api.exportIcalUrl(propId), '_blank');
 }
