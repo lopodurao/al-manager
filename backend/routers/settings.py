@@ -53,25 +53,30 @@ def backup(db: Session = Depends(get_db), _=Auth):
 
 @router.post("/test-email")
 def test_email(db: Session = Depends(get_db), _=Auth):
-    """Send a test email via Resend API to verify configuration."""
+    """Send a test email via Brevo API to verify configuration."""
     import httpx as _httpx
-    api_key = os.getenv("RESEND_API_KEY", "")
+    api_key   = os.getenv("BREVO_API_KEY", "")
     smtp_from = os.getenv("SMTP_FROM", os.getenv("SMTP_USER", ""))
     if not api_key:
-        raise HTTPException(400, "RESEND_API_KEY não configurado nos env vars do Render — cria conta em resend.com e adiciona a variável")
-    to_addr = smtp_from or "test@example.com"
-    from_addr = f"AL Manager <{smtp_from}>" if smtp_from else "AL Manager <onboarding@resend.dev>"
+        raise HTTPException(400, "BREVO_API_KEY não configurado — cria conta em brevo.com, vai a SMTP & API → API Keys → copia a chave e adiciona nos env vars do Render")
+    if not smtp_from:
+        raise HTTPException(400, "SMTP_FROM não configurado — adiciona o teu email (ex: casadapenha800@gmail.com) nos env vars do Render")
     try:
         r = _httpx.post(
-            "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"from": from_addr, "to": [to_addr], "subject": "✓ Teste AL Manager — email a funcionar", "html": "<p>Email de teste do AL Manager. Resend API está a funcionar correctamente.</p>"},
+            "https://api.brevo.com/v3/smtp/email",
+            headers={"api-key": api_key, "Content-Type": "application/json"},
+            json={
+                "sender":      {"name": "AL Manager", "email": smtp_from},
+                "to":          [{"email": smtp_from}],
+                "subject":     "✓ Teste AL Manager — email a funcionar",
+                "htmlContent": "<p>Email de teste do AL Manager. Brevo API está a funcionar correctamente.</p>",
+            },
             timeout=15,
         )
         data = r.json()
         if r.status_code in (200, 201):
-            return {"ok": True, "sent_to": to_addr, "id": data.get("id", "")}
-        raise HTTPException(500, f"Resend erro {r.status_code}: {data}")
+            return {"ok": True, "sent_to": smtp_from}
+        raise HTTPException(500, f"Brevo erro {r.status_code}: {data}")
     except HTTPException:
         raise
     except Exception as e:
