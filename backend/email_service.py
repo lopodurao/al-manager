@@ -1,30 +1,38 @@
-import smtplib, os, logging
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+import os, logging, httpx
 
 logger = logging.getLogger(__name__)
 
-SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASS = os.getenv("SMTP_PASS", "")
-SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER)
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "Casa da Penha")
+SMTP_FROM_ADDR = os.getenv("SMTP_FROM", os.getenv("SMTP_USER", ""))
+
 
 def _send(to: str, subject: str, html: str) -> bool:
-    if not SMTP_USER or not SMTP_PASS or not to:
-        logger.warning(f"Email não enviado (config em falta ou sem destinatário): {to}")
+    if not to:
+        logger.warning("Email não enviado: sem destinatário")
         return False
+    if not RESEND_API_KEY:
+        logger.warning("Email não enviado: RESEND_API_KEY não configurado nos env vars do Render")
+        return False
+    # Resend requires a verified sender. Use the configured from address or their default.
+    from_addr = f"{SMTP_FROM_NAME} <{SMTP_FROM_ADDR}>" if SMTP_FROM_ADDR else f"{SMTP_FROM_NAME} <onboarding@resend.dev>"
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"]    = f"Casa da Penha <{SMTP_FROM}>"
-        msg["To"]      = to
-        msg.attach(MIMEText(html, "html", "utf-8"))
-        with smtplib.SMTP("smtp.gmail.com", 587) as s:
-            s.ehlo()
-            s.starttls()
-            s.login(SMTP_USER, SMTP_PASS)
-            s.sendmail(SMTP_FROM, to, msg.as_string())
-        logger.info(f"Email enviado para {to}: {subject}")
-        return True
+        r = httpx.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={"from": from_addr, "to": [to], "subject": subject, "html": html},
+            timeout=15,
+        )
+        data = r.json()
+        if r.status_code in (200, 201):
+            logger.info(f"Email enviado via Resend para {to}: {subject} (id={data.get('id','')})")
+            return True
+        else:
+            logger.error(f"Resend erro {r.status_code}: {data}")
+            return False
     except Exception as e:
         logger.error(f"Erro ao enviar email para {to}: {e}")
         return False

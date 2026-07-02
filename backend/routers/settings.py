@@ -53,27 +53,29 @@ def backup(db: Session = Depends(get_db), _=Auth):
 
 @router.post("/test-email")
 def test_email(db: Session = Depends(get_db), _=Auth):
-    """Send a test email to verify SMTP configuration."""
-    import smtplib
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.text import MIMEText
-    smtp_user = os.getenv("SMTP_USER", "")
-    smtp_pass = os.getenv("SMTP_PASS", "")
-    if not smtp_user or not smtp_pass:
-        raise HTTPException(400, "SMTP_USER e SMTP_PASS não configurados nos env vars do Render")
+    """Send a test email via Resend API to verify configuration."""
+    import httpx as _httpx
+    api_key = os.getenv("RESEND_API_KEY", "")
+    smtp_from = os.getenv("SMTP_FROM", os.getenv("SMTP_USER", ""))
+    if not api_key:
+        raise HTTPException(400, "RESEND_API_KEY não configurado nos env vars do Render — cria conta em resend.com e adiciona a variável")
+    to_addr = smtp_from or "test@example.com"
+    from_addr = f"AL Manager <{smtp_from}>" if smtp_from else "AL Manager <onboarding@resend.dev>"
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = "✓ Teste AL Manager — SMTP a funcionar"
-        msg["From"]    = f"AL Manager <{smtp_user}>"
-        msg["To"]      = smtp_user
-        msg.attach(MIMEText("<p>Email de teste do AL Manager. SMTP está a funcionar correctamente.</p>", "html", "utf-8"))
-        with smtplib.SMTP("smtp.gmail.com", 587) as s:
-            s.ehlo(); s.starttls()
-            s.login(smtp_user, smtp_pass)
-            s.sendmail(smtp_user, smtp_user, msg.as_string())
-        return {"ok": True, "sent_to": smtp_user}
+        r = _httpx.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"from": from_addr, "to": [to_addr], "subject": "✓ Teste AL Manager — email a funcionar", "html": "<p>Email de teste do AL Manager. Resend API está a funcionar correctamente.</p>"},
+            timeout=15,
+        )
+        data = r.json()
+        if r.status_code in (200, 201):
+            return {"ok": True, "sent_to": to_addr, "id": data.get("id", "")}
+        raise HTTPException(500, f"Resend erro {r.status_code}: {data}")
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(500, f"Erro SMTP: {e}")
+        raise HTTPException(500, f"Erro: {e}")
 
 
 @router.post("/restore")
