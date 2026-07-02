@@ -26,6 +26,55 @@ def update_channel(cid: str, data: schemas.OtaChannelUpdate, db: Session = Depen
     return ch
 
 
+# ── OtaLink: per-property channel configuration ──
+
+@router.get("/links", response_model=List[schemas.OtaLinkOut])
+def list_links(db: Session = Depends(get_db), _=Auth):
+    return db.query(models.OtaLink).all()
+
+
+@router.post("/links", response_model=schemas.OtaLinkOut, status_code=201)
+def create_link(data: schemas.OtaLinkCreate, db: Session = Depends(get_db), _=Auth):
+    link = models.OtaLink(id=str(uuid.uuid4()), **data.model_dump())
+    db.add(link); db.commit(); db.refresh(link)
+    return link
+
+
+@router.put("/links/{lid}", response_model=schemas.OtaLinkOut)
+def update_link(lid: str, data: schemas.OtaLinkCreate, db: Session = Depends(get_db), _=Auth):
+    link = db.query(models.OtaLink).filter(models.OtaLink.id == lid).first()
+    if not link: raise HTTPException(404)
+    for k, v in data.model_dump().items():
+        setattr(link, k, v)
+    db.commit(); db.refresh(link)
+    return link
+
+
+@router.delete("/links/{lid}", status_code=204)
+def delete_link(lid: str, db: Session = Depends(get_db), _=Auth):
+    link = db.query(models.OtaLink).filter(models.OtaLink.id == lid).first()
+    if not link: raise HTTPException(404)
+    db.delete(link); db.commit()
+
+
+@router.post("/links/{lid}/sync")
+async def sync_link(lid: str, db: Session = Depends(get_db), _=Auth):
+    link = db.query(models.OtaLink).filter(models.OtaLink.id == lid).first()
+    if not link or not link.ical_url:
+        raise HTTPException(400, "Link sem URL iCal configurado")
+    async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
+        try:
+            resp = await client.get(link.ical_url)
+            resp.raise_for_status()
+        except Exception as e:
+            raise HTTPException(502, f"Erro ao obter calendário: {e}")
+    new_res = _parse_ical(resp.text, link.prop_id, link.channel, db)
+    await _livvi_and_email(new_res, db)
+    link.last_sync = str(date.today())
+    db.commit()
+    return {"imported": len(new_res)}
+
+
 def _get_settings(db: Session) -> dict:
     rows = db.query(models.Settings).all()
     return {r.key: r.value for r in rows}
@@ -184,29 +233,31 @@ def _build_ical_response(prop_id, db):
 
 
 async def auto_sync_all():
-    """Scheduled job: sync all active OTA channels for all properties."""
+    """Scheduled job: sync all active OtaLinks (one per property × channel)."""
     db = SessionLocal()
     try:
-        channels = db.query(models.OtaChannel).filter(
-            models.OtaChannel.active == True,
-            models.OtaChannel.ical_url != ""
+        links = db.query(models.OtaLink).filter(
+            models.OtaLink.active == True,
+            models.OtaLink.ical_url != "",
         ).all()
-        properties = db.query(models.Property).all()
-        if not channels or not properties:
+        if not links:
             return
         async with httpx.AsyncClient(follow_redirects=True, timeout=20) as client:
-            for ch in channels:
-                for prop in properties:
-                    try:
-                        resp = await client.get(ch.ical_url)
-                        resp.raise_for_status()
-                        new_res = _parse_ical(resp.text, prop.id, ch.slug, db)
-                        if new_res:
-                            await _livvi_and_email(new_res, db)
-                            logger.info(f"Auto-sync {ch.name}/{prop.name}: {len(new_res)} novas reservas")
-                        ch.last_sync = str(date.today())
-                        db.commit()
-                    except Exception as e:
-                        logger.error(f"Auto-sync erro {ch.name}: {e}")
+            for link in links:
+                prop = db.query(models.Property).filter(models.Property.id == link.prop_id).first()
+                prop_name = prop.name if prop else link.prop_id
+                try:
+                    resp = await client.get(link.ical_url)
+                    resp.raise_for_status()
+                    new_res = _parse_ical(resp.text, link.prop_id, link.channel, db)
+                    if new_res:
+                        await _livvi_and_email(new_res, db)
+                        logger.info(f"Auto-sync {link.channel}/{prop_name}: {len(new_res)} novas reservas")
+                    else:
+                        logger.debug(f"Auto-sync {link.channel}/{prop_name}: sem novidades")
+                    link.last_sync = str(date.today())
+                    db.commit()
+                except Exception as e:
+                    logger.error(f"Auto-sync erro {link.channel}/{prop_name}: {e}")
     finally:
         db.close()

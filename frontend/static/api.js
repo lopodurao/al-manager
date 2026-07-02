@@ -75,6 +75,12 @@ const api = {
   syncOta:         (id,prop)  => apiFetch(`/api/ota/${id}/sync?prop_id=${prop}`, { method:'POST' }),
   importIcalUrl:   (p)        => apiFetch('/api/ota/import-ical?' + new URLSearchParams(p), { method:'POST' }),
   exportIcalUrl:   (propId)   => API_BASE + '/api/ota/export-ical' + (propId ? `?prop_id=${propId}` : ''),
+  // OtaLinks (per-property × channel)
+  getOtaLinks:     ()         => apiFetch('/api/ota/links'),
+  createOtaLink:   (d)        => apiFetch('/api/ota/links', { method:'POST', body: JSON.stringify(d) }),
+  updateOtaLink:   (id,d)     => apiFetch(`/api/ota/links/${id}`, { method:'PUT', body: JSON.stringify(d) }),
+  deleteOtaLink:   (id)       => apiFetch(`/api/ota/links/${id}`, { method:'DELETE' }),
+  syncOtaLink:     (id)       => apiFetch(`/api/ota/links/${id}/sync`, { method:'POST' }),
 
   // Settings
   getSettings:     ()         => apiFetch('/api/settings'),
@@ -91,26 +97,29 @@ const cache = {
   cleaning: [],
   messages: [],
   ota: [],
+  otaLinks: [],
   settings: {},
 };
 
 async function loadCache() {
-  const [props, res, txs, clean, msgs, ota, sett] = await Promise.all([
+  const [props, res, txs, clean, msgs, ota, otaLinks, sett] = await Promise.all([
     api.getProperties(),
     api.getReservations(),
     api.getTransactions(),
     api.getCleaning(),
     api.getMessages(),
     api.getOta(),
+    api.getOtaLinks(),
     api.getSettings(),
   ]);
-  cache.properties   = props   || [];
-  cache.reservations = res     || [];
-  cache.transactions = txs     || [];
-  cache.cleaning     = clean   || [];
-  cache.messages     = msgs    || [];
-  cache.ota          = ota     || [];
-  cache.settings     = sett    || {};
+  cache.properties   = props    || [];
+  cache.reservations = res      || [];
+  cache.transactions = txs      || [];
+  cache.cleaning     = clean    || [];
+  cache.messages     = msgs     || [];
+  cache.ota          = ota      || [];
+  cache.otaLinks     = otaLinks || [];
+  cache.settings     = sett     || {};
 }
 
 function getProp(id) { return cache.properties.find(p => p.id === id); }

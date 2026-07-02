@@ -88,6 +88,10 @@ def _run_migrations():
         "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS access_pin VARCHAR DEFAULT ''",
         "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS room VARCHAR DEFAULT ''",
         "ALTER TABLE properties ADD COLUMN IF NOT EXISTS livvi_door_ids VARCHAR DEFAULT ''",
+        """CREATE TABLE IF NOT EXISTS ota_links (
+            id TEXT PRIMARY KEY, prop_id TEXT NOT NULL, channel TEXT NOT NULL,
+            ical_url TEXT DEFAULT '', last_sync TEXT DEFAULT '', active BOOLEAN DEFAULT TRUE
+        )""",
     ]
     with engine.connect() as conn:
         for sql in migrations:

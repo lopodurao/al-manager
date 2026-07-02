@@ -127,6 +127,18 @@ class OtaChannelOut(BaseModel):
     active: bool
     model_config = {"from_attributes": True}
 
+# OtaLink (per-property channel config)
+class OtaLinkCreate(BaseModel):
+    prop_id: str
+    channel: str
+    ical_url: str = ""
+    active: bool = True
+
+class OtaLinkOut(OtaLinkCreate):
+    id: str
+    last_sync: str = ""
+    model_config = {"from_attributes": True}
+
 # Settings (key-value map)
 class SettingsUpdate(BaseModel):
     values: dict

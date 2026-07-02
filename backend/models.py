@@ -106,6 +106,16 @@ class OtaChannel(Base):
     last_sync = Column(String, default="")
     active    = Column(Boolean, default=False)
 
+class OtaLink(Base):
+    """Per-property OTA iCal configuration — one row per (property × channel)."""
+    __tablename__ = "ota_links"
+    id        = Column(String, primary_key=True)
+    prop_id   = Column(String, ForeignKey("properties.id"), nullable=False)
+    channel   = Column(String, nullable=False)   # airbnb | booking | livvi | direct
+    ical_url  = Column(String, default="")       # URL to pull reservations FROM the OTA
+    last_sync = Column(String, default="")
+    active    = Column(Boolean, default=True)
+
 class Settings(Base):
     __tablename__ = "settings"
     key   = Column(String, primary_key=True)

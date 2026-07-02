@@ -1,24 +1,46 @@
+const OTA_CHANNELS = {airbnb:'Airbnb', booking:'Booking.com', livvi:'Livvi', direct:'Direto'};
+
 async function renderOta() {
+  const links = cache.otaLinks;
+  const props = cache.properties;
   return `
-<div class="section-header"><h2>Canais OTA</h2></div>
-<div class="card mb-4" style="background:#fef3c7;border:1px solid #fcd34d">
-  <div style="font-size:13.5px;color:#92400e"><strong>Sincronização iCal:</strong> Importa reservas via link iCal do Airbnb, Booking.com e Livvi. As reservas são criadas automaticamente.</div>
+<div class="section-header">
+  <h2>Canais OTA</h2>
+  <button class="btn btn-primary" onclick="openAddOtaLink()">+ Ligar canal</button>
 </div>
-<div style="display:flex;flex-direction:column;gap:0">
-  ${cache.ota.map(ch=>`
-  <div class="ota-card">
-    <div class="ota-logo ${ch.slug}">${ch.slug==='airbnb'?'AB':ch.slug==='booking'?'BK':'LV'}</div>
-    <div class="ota-info">
-      <div class="ota-name">${ch.name}</div>
-      <div class="ota-status">${ch.active?'<span style="color:var(--success)">● Ativo</span>':'<span style="color:var(--gray-400)">○ Inativo</span>'}${ch.last_sync?` · Última sync: ${fmtDate(ch.last_sync)}`:''}</div>
-      ${ch.ical_url?`<div style="font-size:11px;color:var(--gray-400);margin-top:2px">${escHtml(ch.ical_url.slice(0,60))}…</div>`:''}
-    </div>
-    <div class="ota-actions">
-      <button class="btn btn-sm btn-outline" onclick="configOta('${ch.id}')">Configurar</button>
-      ${ch.ical_url?`<button class="btn btn-sm btn-primary" onclick="openSyncOta('${ch.id}')">Sincronizar</button>`:''}
-    </div>
-  </div>`).join('')}
+<div class="card mb-4" style="background:#eff6ff;border:1px solid #bfdbfe">
+  <div style="font-size:13.5px;color:#1e40af">
+    <strong>Como funciona:</strong> Para cada propriedade e cada plataforma (Airbnb, Booking.com…),
+    adiciona um link. O sistema vai buscar as reservas automaticamente de 30 em 30 minutos
+    e o calendário de disponibilidade é partilhado via link público abaixo.
+  </div>
 </div>
+${props.length === 0 ? '<div class="card" style="color:var(--gray-500);text-align:center;padding:32px">Cria primeiro uma propriedade antes de ligar canais OTA.</div>' : ''}
+${props.map(prop => {
+  const propLinks = links.filter(l => l.prop_id === prop.id);
+  return `<div class="card mb-3">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-weight:700;font-size:15px">🏠 ${escHtml(prop.name)}</div>
+      <button class="btn btn-sm btn-outline" onclick="openAddOtaLink('${prop.id}')">+ Canal</button>
+    </div>
+    ${propLinks.length === 0
+      ? '<div style="font-size:13px;color:var(--gray-400);padding:8px 0">Nenhum canal configurado. Clica em "+ Canal" para ligar o Airbnb ou Booking.com.</div>'
+      : propLinks.map(l => `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--gray-100)">
+          <div style="width:36px;height:36px;border-radius:8px;background:${l.channel==='airbnb'?'#ff5a5f':l.channel==='booking'?'#003580':'#667eea'};display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700;flex-shrink:0">${l.channel==='airbnb'?'AB':l.channel==='booking'?'BK':l.channel==='livvi'?'LV':'DT'}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:13px">${OTA_CHANNELS[l.channel]||l.channel}</div>
+            <div style="font-size:11px;color:var(--gray-400);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.ical_url?escHtml(l.ical_url.slice(0,55))+'…':'Sem URL configurado'}</div>
+            ${l.last_sync?`<div style="font-size:11px;color:var(--success)">✓ Última sync: ${fmtDate(l.last_sync)}</div>`:''}
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            ${l.ical_url?`<button class="btn btn-sm btn-primary" onclick="doSyncLink('${l.id}')">Sync</button>`:''}
+            <button class="btn btn-sm btn-outline" onclick="openEditOtaLink('${l.id}')">Editar</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteOtaLink('${l.id}')">✕</button>
+          </div>
+        </div>`).join('')
+    }
+  </div>`;
+}).join('')}
 <div class="card mt-4">
   <div class="card-title" style="margin-bottom:12px">Importar iCal</div>
   <div class="tabs">
@@ -65,38 +87,65 @@ async function renderOta() {
 </div>`;
 }
 
+function _otaLinkForm(l, defaultPropId) {
+  const propSel = cache.properties.map(p=>`<option value="${p.id}" ${(l?.prop_id||defaultPropId)===p.id?'selected':''}>${escHtml(p.name)}</option>`).join('');
+  const chSel = Object.entries(OTA_CHANNELS).map(([k,v])=>`<option value="${k}" ${l?.channel===k?'selected':''}>${v}</option>`).join('');
+  const hint = {
+    airbnb: 'Airbnb → Calendário → Exportar calendário → copia o link .ics',
+    booking: 'Booking.com → Extranet → Calendário → Sincronizar → copia URL iCal',
+    livvi: 'Livvi → Configurações → Calendário → iCal URL',
+  };
+  return `
+    <div class="form-group"><label>Propriedade</label><select id="ol-prop">${propSel}</select></div>
+    <div class="form-group"><label>Canal</label><select id="ol-channel" onchange="document.getElementById('ol-hint').textContent=({airbnb:'${hint.airbnb}',booking:'${hint.booking}',livvi:'${hint.livvi}'})[this.value]||''">${chSel}</select></div>
+    <div class="form-group"><label>URL iCal (do canal para importar)</label>
+      <input id="ol-url" value="${escHtml(l?.ical_url||'')}" placeholder="https://www.airbnb.com/calendar/ical/…">
+      <div id="ol-hint" style="font-size:12px;color:var(--gray-500);margin-top:4px">${hint[l?.channel||'airbnb']||hint.airbnb}</div>
+    </div>
+    <div class="form-group"><label>Ativo</label><select id="ol-active"><option value="1" ${(l?.active??true)?'selected':''}>Sim — sincroniza automaticamente</option><option value="0" ${l?.active===false?'selected':''}>Não</option></select></div>
+    <div class="form-actions"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="ol-save-btn">Guardar</button></div>`;
+}
+
+function openAddOtaLink(propId) {
+  openModal('Novo link OTA', _otaLinkForm(null, propId||cache.properties[0]?.id), true);
+  document.getElementById('ol-save-btn').onclick = () => doSaveOtaLink(null);
+}
+
+function openEditOtaLink(id) {
+  const l = cache.otaLinks.find(l=>l.id===id);
+  openModal('Editar link OTA', _otaLinkForm(l), true);
+  document.getElementById('ol-save-btn').onclick = () => doSaveOtaLink(id);
+}
+
+async function doSaveOtaLink(id) {
+  const d = { prop_id: document.getElementById('ol-prop').value, channel: document.getElementById('ol-channel').value, ical_url: document.getElementById('ol-url').value.trim(), active: document.getElementById('ol-active').value === '1' };
+  try {
+    id ? await api.updateOtaLink(id, d) : await api.createOtaLink(d);
+    closeModal(); await navigate('ota'); toastMsg('Link guardado');
+  } catch(e) { toastMsg('Erro: '+e.message); }
+}
+
+async function deleteOtaLink(id) {
+  if (!confirm('Remover este link OTA?')) return;
+  try { await api.deleteOtaLink(id); await navigate('ota'); toastMsg('Link removido'); }
+  catch(e) { toastMsg('Erro: '+e.message); }
+}
+
+async function doSyncLink(id) {
+  const l = cache.otaLinks.find(l=>l.id===id);
+  const prop = cache.properties.find(p=>p.id===l?.prop_id);
+  toastMsg(`A sincronizar ${OTA_CHANNELS[l?.channel]||''}…`);
+  try {
+    const r = await api.syncOtaLink(id);
+    await navigate('ota');
+    toastMsg(`${r.imported} reserva(s) importada(s) — ${prop?.name||''}`);
+  } catch(e) { toastMsg('Erro: '+e.message); }
+}
+
 function switchOtaTab(tab,el) {
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); el.classList.add('active');
   document.getElementById('ota-tab-url').style.display=tab==='url'?'':'none';
   document.getElementById('ota-tab-file').style.display=tab==='file'?'':'none';
-}
-
-function configOta(id) {
-  const ch=cache.ota.find(c=>c.id===id);
-  openModal(`Configurar ${ch.name}`,`
-    <div class="form-group"><label>URL iCal</label><input id="ota-cfg-url" value="${escHtml(ch.ical_url||'')}" placeholder="https://…/calendar.ics">
-    <div style="font-size:12px;color:var(--gray-500);margin-top:4px">${ch.slug==='airbnb'?'No Airbnb: Calendário → Exportar calendário':ch.slug==='booking'?'No Booking.com: Extranet → Calendário → iCal':'No Livvi: Configurações → Calendário → iCal URL'}</div></div>
-    <div class="form-group"><label>Ativo</label><select id="ota-cfg-active"><option value="1" ${ch.active?'selected':''}>Sim</option><option value="0" ${!ch.active?'selected':''}>Não</option></select></div>
-    <div class="form-actions"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="doSaveOta('${id}')">Guardar</button></div>`);
-}
-
-async function doSaveOta(id) {
-  const d={ ical_url:document.getElementById('ota-cfg-url').value.trim(), active:document.getElementById('ota-cfg-active').value==='1' };
-  try { await api.updateOta(id,d); closeModal(); await navigate('ota'); toastMsg('Canal atualizado'); }
-  catch(e){ toastMsg('Erro: '+e.message); }
-}
-
-function openSyncOta(id) {
-  const props=cache.properties;
-  openModal('Sincronizar calendário',`
-    <div class="form-group"><label>Propriedade destino</label><select id="sync-prop">${propOptions()}</select></div>
-    <div class="form-actions"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="doSyncOta('${id}')">Sincronizar</button></div>`);
-}
-
-async function doSyncOta(id) {
-  const propId=document.getElementById('sync-prop').value;
-  try { const r=await api.syncOta(id,propId); closeModal(); await navigate('reservations'); toastMsg(`${r.imported} reserva(s) importada(s)`); }
-  catch(e){ toastMsg('Erro: '+e.message); }
 }
 
 async function doImportUrl() {
