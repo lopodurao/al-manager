@@ -144,3 +144,78 @@ def send_booking_confirmation(reservation, property_obj, settings: dict, access_
         subject=f"✓ Reserva confirmada — {prop_name} | {reservation.checkin} → {reservation.checkout}",
         html=html
     )
+
+
+def send_cancellation_email(reservation, property_obj, settings: dict) -> bool:
+    if not reservation.guest_email:
+        return False
+
+    owner_phone = settings.get("ownerPhone", "—")
+    owner_email = settings.get("ownerEmail", SMTP_FROM_ADDR)
+    prop_name   = property_obj.name if property_obj else "Alojamento"
+    prop_addr   = property_obj.address if property_obj else ""
+
+    nights = (
+        __import__("datetime").date.fromisoformat(reservation.checkout) -
+        __import__("datetime").date.fromisoformat(reservation.checkin)
+    ).days
+
+    html = f"""
+<!DOCTYPE html>
+<html lang="pt">
+<head><meta charset="UTF-8">
+<style>
+  body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f7; margin: 0; padding: 24px; color: #1f2937; }}
+  .wrap {{ max-width: 580px; margin: 0 auto; }}
+  .header {{ background: linear-gradient(135deg, #ef4444, #b91c1c); border-radius: 16px 16px 0 0; padding: 36px 32px; text-align: center; color: white; }}
+  .header h1 {{ margin: 0; font-size: 26px; font-weight: 800; }}
+  .header p  {{ margin: 8px 0 0; opacity: .85; font-size: 15px; }}
+  .body {{ background: white; border-radius: 0 0 16px 16px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,.08); }}
+  .info-box {{ background: #f9fafb; border-radius: 10px; padding: 16px; border: 1px solid #e5e7eb; margin: 20px 0; }}
+  .info-box .row {{ display:flex; justify-content:space-between; padding: 6px 0; border-bottom: 1px solid #f3f4f6; font-size:14px; }}
+  .info-box .row:last-child {{ border-bottom: none; }}
+  .contact {{ background: #eff6ff; border-radius: 12px; padding: 18px; margin: 20px 0; border-left: 4px solid #3b82f6; font-size:14px; }}
+  .footer {{ margin-top: 28px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 13px; color: #6b7280; text-align: center; }}
+  .badge {{ display: inline-block; background: #fee2e2; color: #991b1b; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; margin-bottom: 16px; }}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <h1>🏠 {prop_name}</h1>
+    <p>Cancelamento de reserva</p>
+  </div>
+  <div class="body">
+    <span class="badge">✗ Reserva cancelada</span>
+    <p style="font-size:16px;font-weight:600">Olá {reservation.guest_name},</p>
+    <p style="color:#4b5563;line-height:1.7">
+      Informamos que a sua reserva em <strong>{prop_name}</strong> foi cancelada.
+      Os detalhes da reserva cancelada são os seguintes:
+    </p>
+    <div class="info-box">
+      <div class="row"><span style="color:#6b7280">Alojamento</span><strong>{prop_name}</strong></div>
+      <div class="row"><span style="color:#6b7280">Check-in</span><strong>{reservation.checkin}</strong></div>
+      <div class="row"><span style="color:#6b7280">Check-out</span><strong>{reservation.checkout}</strong></div>
+      <div class="row"><span style="color:#6b7280">Duração</span><strong>{nights} noite{"s" if nights != 1 else ""}</strong></div>
+    </div>
+    <div class="contact">
+      <strong>Questões sobre o cancelamento?</strong><br>
+      Contacte-nos pelo <strong>{owner_phone}</strong> ou responda a este email (<strong>{owner_email}</strong>).
+    </div>
+    <p style="color:#4b5563;font-size:14px;line-height:1.7">
+      Pedimos desculpa pelo incómodo e esperamos poder recebê-lo(a) numa oportunidade futura.
+    </p>
+    <div class="footer">
+      Este email foi enviado automaticamente pelo sistema AL Manager.<br>
+      {prop_name} · {prop_addr}
+    </div>
+  </div>
+</div>
+</body>
+</html>
+"""
+    return _send(
+        to=reservation.guest_email,
+        subject=f"✗ Reserva cancelada — {prop_name} | {reservation.checkin} → {reservation.checkout}",
+        html=html
+    )

@@ -64,7 +64,7 @@ function renderResRows(list) {
       <td style="white-space:nowrap">
         <button class="btn btn-sm btn-outline" onclick="editReservation('${r.id}')">Editar</button>
         ${r.guest_email ? `<button class="btn btn-sm btn-success" onclick="openSendInvoice('${r.id}','${escHtml(r.guest_email)}','${escHtml(r.guest_name)}')">📄 Fatura</button>` : ''}
-        <button class="btn btn-sm btn-danger" onclick="deleteReservation('${r.id}')">✕</button>
+        ${r.status !== 'cancelled' ? `<button class="btn btn-sm btn-danger" onclick="cancelReservation('${r.id}','${escHtml(r.guest_name)}')">Cancelar</button>` : `<button class="btn btn-sm btn-outline" onclick="deleteReservation('${r.id}')" title="Eliminar permanentemente">✕</button>`}
       </td></tr>`;
   }).join('');
 }
@@ -167,9 +167,20 @@ async function doSaveReservation(id) {
     }
   }
 }
+async function cancelReservation(id, name) {
+  if (!confirm(`Cancelar a reserva de ${name}?\n\nSe o hóspede tiver email, será enviada uma notificação de cancelamento.`)) return;
+  const r = cache.reservations.find(r => r.id === id);
+  if (!r) return;
+  try {
+    await api.updateReservation(id, { ...r, status: 'cancelled' });
+    await navigate('reservations');
+    toastMsg('Reserva cancelada' + (r.guest_email ? ' — email de cancelamento enviado' : ''));
+  } catch(e) { toastMsg('Erro: ' + e.message); }
+}
+
 async function deleteReservation(id) {
-  if (!confirm('Apagar esta reserva?')) return;
-  try { await api.deleteReservation(id); await navigate('reservations'); toastMsg('Reserva apagada'); }
+  if (!confirm('Eliminar permanentemente esta reserva? Esta acção não pode ser desfeita.')) return;
+  try { await api.deleteReservation(id); await navigate('reservations'); toastMsg('Reserva eliminada'); }
   catch(e) { toastMsg('Erro: '+e.message); }
 }
 

@@ -114,7 +114,7 @@ def get_reservation(rid: str, db: Session = Depends(get_db), _=Auth):
     return r
 
 @router.put("/{rid}", response_model=schemas.ReservationOut)
-async def update_reservation(rid: str, data: schemas.ReservationUpdate, db: Session = Depends(get_db), _=Auth):
+async def update_reservation(rid: str, data: schemas.ReservationUpdate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), _=Auth):
     r = db.query(models.Reservation).filter(models.Reservation.id == rid).first()
     if not r: raise HTTPException(404, "Reserva não encontrada")
     was_active = r.status != "cancelled"
@@ -123,11 +123,32 @@ async def update_reservation(rid: str, data: schemas.ReservationUpdate, db: Sess
     for k, v in data.model_dump().items():
         setattr(r, k, v)
     db.commit(); db.refresh(r)
-    # Cancel Livvi booking if reservation was just cancelled
-    if was_active and r.status == "cancelled" and r.livvi_booking_id:
-        from .. import livvi_service
-        await livvi_service.delete_booking(r.livvi_booking_id)
+    # Reservation just cancelled: delete Livvi booking + send cancellation email
+    if was_active and r.status == "cancelled":
+        if r.livvi_booking_id:
+            from .. import livvi_service
+            await livvi_service.delete_booking(r.livvi_booking_id)
+        if r.guest_email:
+            background_tasks.add_task(_send_cancellation, r.id)
     return r
+
+
+def _send_cancellation(reservation_id: str):
+    from ..email_service import send_cancellation_email
+    from ..database import SessionLocal
+    db = SessionLocal()
+    try:
+        r = db.query(models.Reservation).filter(models.Reservation.id == reservation_id).first()
+        if not r: return
+        prop = db.query(models.Property).filter(models.Property.id == r.prop_id).first()
+        rows = db.query(models.Settings).all()
+        settings = {row.key: row.value for row in rows}
+        sent = send_cancellation_email(r, prop, settings)
+        _log.info(f"Email cancelamento {'ENVIADO' if sent else 'NÃO ENVIADO'} → {r.guest_email}")
+    except Exception as e:
+        _log.error(f"Erro email cancelamento {reservation_id}: {e}", exc_info=True)
+    finally:
+        db.close()
 
 @router.patch("/{rid}/sef-reported", response_model=schemas.ReservationOut)
 def mark_sef_reported(rid: str, db: Session = Depends(get_db), _=Auth):
