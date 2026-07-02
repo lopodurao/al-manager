@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
     _seed_ical_token()
     scheduler = AsyncIOScheduler()
     scheduler.add_job(_daily_backup, "cron", hour=3, minute=0)
-    scheduler.add_job(ota.auto_sync_all, "interval", minutes=30)
+    scheduler.add_job(ota.auto_sync_all, "interval", minutes=15)
     scheduler.add_job(_self_ping, "interval", minutes=10)
     scheduler.start()
     logger.info("AL Manager started")
