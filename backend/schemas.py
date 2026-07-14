@@ -32,6 +32,8 @@ class PropertyCreate(BaseModel):
     color: str = "#667eea"
     livvi_door_ids: str = ""
     notes: str = ""
+    nightly_rate: float = 0
+    public_bookable: bool = False
 
 class PropertyOut(PropertyCreate):
     id: str
@@ -56,6 +58,8 @@ class ReservationCreate(BaseModel):
     sef_reported: bool = False
     room: str = ""
     notes: str = ""
+    deposit_status: str = ""
+    stripe_session_id: str = ""
 
 class ReservationOut(ReservationCreate):
     id: str
@@ -142,6 +146,27 @@ class OtaLinkOut(OtaLinkCreate):
 # Settings (key-value map)
 class SettingsUpdate(BaseModel):
     values: dict
+
+# Public booking engine (no auth — keep this deliberately narrow;
+# never let guest input set price/status/channel/commission directly)
+class PublicRoomOut(BaseModel):
+    id: str
+    name: str
+    nightly_rate: float
+    max_guests: int
+    beds: int
+    baths: int
+
+class PublicBookingRequest(BaseModel):
+    prop_id: str
+    checkin: str
+    checkout: str
+    guest_name: str
+    guest_email: str
+    guest_phone: str = ""
+    guests: int = 2
+    notes: str = ""
+    hp: str = ""  # honeypot — must stay empty
 
 # Backup
 class BackupData(BaseModel):

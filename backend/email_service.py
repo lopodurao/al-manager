@@ -219,3 +219,138 @@ def send_cancellation_email(reservation, property_obj, settings: dict) -> bool:
         subject=f"✗ Reserva cancelada — {prop_name} | {reservation.checkin} → {reservation.checkout}",
         html=html
     )
+
+
+def send_new_booking_request_notification(reservation, property_obj, settings: dict) -> bool:
+    """Notify the OWNER that a paid booking request came in from the website and needs review."""
+    owner_email = settings.get("ownerEmail", SMTP_FROM_ADDR)
+    if not owner_email:
+        return False
+
+    prop_name = property_obj.name if property_obj else "Alojamento"
+
+    nights = (
+        __import__("datetime").date.fromisoformat(reservation.checkout) -
+        __import__("datetime").date.fromisoformat(reservation.checkin)
+    ).days
+
+    html = f"""
+<!DOCTYPE html>
+<html lang="pt">
+<head><meta charset="UTF-8">
+<style>
+  body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f7; margin: 0; padding: 24px; color: #1f2937; }}
+  .wrap {{ max-width: 580px; margin: 0 auto; }}
+  .header {{ background: linear-gradient(135deg, #f59e0b, #d97706); border-radius: 16px 16px 0 0; padding: 36px 32px; text-align: center; color: white; }}
+  .header h1 {{ margin: 0; font-size: 26px; font-weight: 800; }}
+  .header p  {{ margin: 8px 0 0; opacity: .85; font-size: 15px; }}
+  .body {{ background: white; border-radius: 0 0 16px 16px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,.08); }}
+  .info-box {{ background: #f9fafb; border-radius: 10px; padding: 16px; border: 1px solid #e5e7eb; margin: 20px 0; }}
+  .info-box .row {{ display:flex; justify-content:space-between; padding: 6px 0; border-bottom: 1px solid #f3f4f6; font-size:14px; }}
+  .info-box .row:last-child {{ border-bottom: none; }}
+  .footer {{ margin-top: 28px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 13px; color: #6b7280; text-align: center; }}
+  .badge {{ display: inline-block; background: #fef3c7; color: #92400e; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; margin-bottom: 16px; }}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <h1>🏠 {prop_name}</h1>
+    <p>Novo pedido de reserva pago — website</p>
+  </div>
+  <div class="body">
+    <span class="badge">⏳ Aguarda confirmação</span>
+    <p style="color:#4b5563;line-height:1.7">
+      Chegou um pedido de reserva pelo site, com pagamento já efetuado. Reveja e confirme no AL Manager
+      para gerar o PIN de acesso e enviar a confirmação ao hóspede.
+    </p>
+    <div class="info-box">
+      <div class="row"><span style="color:#6b7280">Alojamento</span><strong>{prop_name}</strong></div>
+      <div class="row"><span style="color:#6b7280">Hóspede</span><strong>{reservation.guest_name}</strong></div>
+      <div class="row"><span style="color:#6b7280">Contacto</span><strong>{reservation.guest_email} · {reservation.guest_phone or "—"}</strong></div>
+      <div class="row"><span style="color:#6b7280">Check-in</span><strong>{reservation.checkin}</strong></div>
+      <div class="row"><span style="color:#6b7280">Check-out</span><strong>{reservation.checkout}</strong></div>
+      <div class="row"><span style="color:#6b7280">Duração</span><strong>{nights} noite{"s" if nights != 1 else ""}</strong></div>
+      <div class="row"><span style="color:#6b7280">Hóspedes</span><strong>{reservation.guests}</strong></div>
+      <div class="row"><span style="color:#6b7280">Valor pago</span><strong>{reservation.price:.2f} €</strong></div>
+    </div>
+    <div class="footer">
+      Este email foi enviado automaticamente pelo sistema AL Manager.<br>
+      {prop_name}
+    </div>
+  </div>
+</div>
+</body>
+</html>
+"""
+    return _send(
+        to=owner_email,
+        subject=f"⏳ Novo pedido de reserva (pago) — {prop_name} | {reservation.checkin} → {reservation.checkout}",
+        html=html
+    )
+
+
+def send_booking_request_received(reservation, property_obj) -> bool:
+    """Acknowledge to the GUEST that their paid booking request was received and is pending confirmation."""
+    if not reservation.guest_email:
+        return False
+
+    prop_name = property_obj.name if property_obj else "Alojamento"
+
+    nights = (
+        __import__("datetime").date.fromisoformat(reservation.checkout) -
+        __import__("datetime").date.fromisoformat(reservation.checkin)
+    ).days
+
+    html = f"""
+<!DOCTYPE html>
+<html lang="pt">
+<head><meta charset="UTF-8">
+<style>
+  body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f7; margin: 0; padding: 24px; color: #1f2937; }}
+  .wrap {{ max-width: 580px; margin: 0 auto; }}
+  .header {{ background: linear-gradient(135deg, #f59e0b, #d97706); border-radius: 16px 16px 0 0; padding: 36px 32px; text-align: center; color: white; }}
+  .header h1 {{ margin: 0; font-size: 26px; font-weight: 800; }}
+  .header p  {{ margin: 8px 0 0; opacity: .85; font-size: 15px; }}
+  .body {{ background: white; border-radius: 0 0 16px 16px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,.08); }}
+  .info-box {{ background: #f9fafb; border-radius: 10px; padding: 16px; border: 1px solid #e5e7eb; margin: 20px 0; }}
+  .info-box .row {{ display:flex; justify-content:space-between; padding: 6px 0; border-bottom: 1px solid #f3f4f6; font-size:14px; }}
+  .info-box .row:last-child {{ border-bottom: none; }}
+  .footer {{ margin-top: 28px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 13px; color: #6b7280; text-align: center; }}
+  .badge {{ display: inline-block; background: #fef3c7; color: #92400e; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; margin-bottom: 16px; }}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <h1>🏠 {prop_name}</h1>
+    <p>Pedido de reserva recebido</p>
+  </div>
+  <div class="body">
+    <span class="badge">⏳ Pagamento recebido — aguarda confirmação</span>
+    <p style="font-size:16px;font-weight:600">Olá {reservation.guest_name},</p>
+    <p style="color:#4b5563;line-height:1.7">
+      Recebemos o seu pedido de reserva e o respetivo pagamento. O pedido está agora a aguardar
+      confirmação — receberá um novo email assim que for confirmado.
+    </p>
+    <div class="info-box">
+      <div class="row"><span style="color:#6b7280">Alojamento</span><strong>{prop_name}</strong></div>
+      <div class="row"><span style="color:#6b7280">Check-in</span><strong>{reservation.checkin}</strong></div>
+      <div class="row"><span style="color:#6b7280">Check-out</span><strong>{reservation.checkout}</strong></div>
+      <div class="row"><span style="color:#6b7280">Duração</span><strong>{nights} noite{"s" if nights != 1 else ""}</strong></div>
+      <div class="row"><span style="color:#6b7280">Valor pago</span><strong>{reservation.price:.2f} €</strong></div>
+    </div>
+    <div class="footer">
+      Este email foi enviado automaticamente pelo sistema AL Manager.<br>
+      {prop_name}
+    </div>
+  </div>
+</div>
+</body>
+</html>
+"""
+    return _send(
+        to=reservation.guest_email,
+        subject=f"⏳ Pedido de reserva recebido — {prop_name} | {reservation.checkin} → {reservation.checkout}",
+        html=html
+    )

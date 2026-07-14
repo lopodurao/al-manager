@@ -31,6 +31,9 @@ Frontend is served as static files by FastAPI — no separate build step. Open `
 | `LIVVI_CLIENT_ID` / `LIVVI_CLIENT_SECRET` | VingCard Livvi OAuth2 |
 | `LIVVI_SITE_ID` | Livvi site ID (738 for Casa da Penha) |
 | `RENDER_EXTERNAL_URL` | Set by Render automatically — used for self-ping |
+| `STRIPE_SECRET_KEY` | Stripe API key — public booking checkout |
+| `STRIPE_WEBHOOK_SECRET` | Verifies `POST /api/public/stripe-webhook` signatures |
+| `PUBLIC_SITE_URL` | Marketing site origin (casadapenha.pt) — Stripe success/cancel redirect target, NOT this API's own URL |
 
 ## Architecture
 
@@ -45,12 +48,15 @@ backend/
   schemas.py       # Pydantic v2 schemas (model_config = {"from_attributes": True})
   database.py      # Engine: PostgreSQL (SSL) or SQLite fallback
   auth.py          # JWT + bcrypt
-  livvi_service.py # VingCard Livvi API (async httpx, token cache, door type filtering)
-  email_service.py # Brevo HTTP API (not SMTP — blocked by Render)
+  livvi_service.py  # VingCard Livvi API (async httpx, token cache, door type filtering)
+  email_service.py  # Brevo HTTP API (not SMTP — blocked by Render)
+  stripe_service.py # Stripe Checkout session creation + webhook signature verification
+  booking_logic.py  # check_overlap() — shared between the authenticated and public routers
   routers/
     reservations.py  # overlap check, BackgroundTasks for Livvi+email
     ota.py           # OtaLink CRUD, iCal parse/sync, public calendar feed
     settings.py      # Key-value settings, test-email endpoint
+    public.py        # UNAUTHENTICATED — public booking engine for casadapenha.pt (see below)
     properties/transactions/cleaning/messages/auth.py
 ```
 
@@ -91,7 +97,17 @@ Door IDs per property are stored in `Property.livvi_door_ids` (comma-separated s
 
 ### Double-booking prevention
 
-`_check_overlap(db, prop_id, checkin, checkout, exclude_id)` is called in both `create_reservation` and `update_reservation`. It also runs inside `_parse_ical` before creating iCal-imported reservations. Raises HTTP 409 with a human-readable message.
+`check_overlap(db, prop_id, checkin, checkout, exclude_id)` lives in `booking_logic.py` (shared by both the authenticated and public routers) and is called from `create_reservation`/`update_reservation` and inside `_parse_ical` before creating iCal-imported reservations. Raises HTTP 409 with a human-readable message.
+
+### Public booking engine (casadapenha.pt)
+
+`routers/public.py` has zero auth — it's what the marketing site calls directly (CORS is already `allow_origins=["*"]`). Only `Property` rows with `public_bookable=True` are ever exposed (currently Quarto Coral and Quarto Bamboo — set via a checkbox on the property form; also needs `nightly_rate` set or booking requests are rejected).
+
+Flow: guest submits `POST /api/public/booking-requests` → creates a `Reservation` with `status='pending'`, `channel='website'`, `deposit_status='awaiting_payment'`, full stay price computed server-side (`nights * nightly_rate` — **never trust a client-submitted price**) → Stripe Checkout Session created, guest redirected there. On `checkout.session.completed` (webhook, signature-verified via `STRIPE_WEBHOOK_SECRET`), `deposit_status` flips to `'paid'` and both the owner (`send_new_booking_request_notification`) and guest (`send_booking_request_received`) are emailed. The owner still has to manually flip `status` to `'confirmed'` in the CRM UI — that PUT now also fires the same Livvi PIN + confirmation-email background task that `create_reservation` fires for brand-new confirmed reservations (see `update_reservation` in `reservations.py`).
+
+A pending-but-unpaid request still blocks those dates (via `check_overlap`) until `_expire_stale_booking_requests` (hourly APScheduler job in `main.py`) auto-cancels anything left in `awaiting_payment` for more than 24h — this exists specifically so an abandoned Stripe Checkout can't squat on dates indefinitely.
+
+Spam protection is a honeypot field (`hp` in `PublicBookingRequest` — must arrive empty) plus the 24h expiry; there's no CAPTCHA or rate-limiting library in this codebase yet.
 
 ## Data model notes
 

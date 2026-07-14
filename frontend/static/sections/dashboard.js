@@ -10,6 +10,7 @@ async function renderDashboard() {
   const mExpense = cache.transactions.filter(t => t.type==='expense' && t.date.startsWith(monthStr)).reduce((s,t)=>s+t.amount,0);
   const pendingTasks = cache.cleaning.filter(t => t.status==='pending').length;
   const sefPending   = res.filter(r => r.guest_nationality !== 'PT' && r.checkin >= todayStr && r.status==='confirmed' && !r.sef_reported).length;
+  const pendingRequests = res.filter(r => r.status==='pending' && r.channel==='website').length;
   const in7 = new Date(now); in7.setDate(in7.getDate()+7);
   const in7str = in7.toISOString().slice(0,10);
   const upcoming7 = res.filter(r => r.status!=='cancelled' && r.checkin >= todayStr && r.checkin <= in7str);
@@ -48,6 +49,12 @@ async function renderDashboard() {
     <div class="stat-label">SEF pendente</div>
     <div class="stat-value">${sefPending}</div>
     <div class="stat-sub">${pendingTasks} limpezas pendentes</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon ${pendingRequests>0?'amber':'green'}"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg></div>
+    <div class="stat-label">Pedidos pendentes</div>
+    <div class="stat-value">${pendingRequests}</div>
+    <div class="stat-sub">Vindos do site — por confirmar</div>
   </div>
 </div>
 <div class="grid-2">

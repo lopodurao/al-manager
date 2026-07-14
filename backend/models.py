@@ -29,6 +29,8 @@ class Property(Base):
     color          = Column(String, default="#667eea")
     livvi_door_ids = Column(String, default="")
     notes          = Column(Text, default="")
+    nightly_rate    = Column(Float, default=0)
+    public_bookable = Column(Boolean, default=False)
     created_at = Column(DateTime, default=now_utc)
     reservations = relationship("Reservation", back_populates="property", cascade="all, delete-orphan")
     transactions = relationship("Transaction", back_populates="property", cascade="all, delete-orphan")
@@ -56,6 +58,8 @@ class Reservation(Base):
     livvi_booking_id = Column(String, default="")
     access_pin       = Column(String, default="")
     notes            = Column(Text, default="")
+    deposit_status     = Column(String, default="")
+    stripe_session_id  = Column(String, default="")
     created_at       = Column(DateTime, default=now_utc)
     property = relationship("Property", back_populates="reservations")
 

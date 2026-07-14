@@ -169,6 +169,7 @@ tr:hover td { background: #fafbff; }
 .badge-blue   { background: #dbeafe; color: #1e40af; }
 .badge-gray   { background: var(--gray-100); color: var(--gray-600); }
 .badge-purple { background: #ede9fe; color: #5b21b6; }
+.badge-teal   { background: #ccfbf1; color: #0f766e; }
 
 /* ── BUTTONS ── */
 .btn {

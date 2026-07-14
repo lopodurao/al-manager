@@ -1,4 +1,4 @@
-const CHANNELS = { airbnb:'Airbnb', booking:'Booking.com', livvi:'Livvi', direct:'Direto' };
+const CHANNELS = { airbnb:'Airbnb', booking:'Booking.com', livvi:'Livvi', direct:'Direto', website:'Site' };
 const COUNTRIES = { PT:'🇵🇹 Portugal',DE:'🇩🇪 Alemanha',FR:'🇫🇷 França',ES:'🇪🇸 Espanha',GB:'🇬🇧 Reino Unido',US:'🇺🇸 EUA',BR:'🇧🇷 Brasil',IT:'🇮🇹 Itália',NL:'🇳🇱 Holanda',BE:'🇧🇪 Bélgica',CH:'🇨🇭 Suíça',AT:'🇦🇹 Áustria',PL:'🇵🇱 Polónia',SE:'🇸🇪 Suécia',DK:'🇩🇰 Dinamarca',NO:'🇳🇴 Noruega',FI:'🇫🇮 Finlândia' };
 const FLAG = { PT:'🇵🇹',DE:'🇩🇪',FR:'🇫🇷',ES:'🇪🇸',GB:'🇬🇧',US:'🇺🇸',BR:'🇧🇷',IT:'🇮🇹',NL:'🇳🇱',BE:'🇧🇪',CH:'🇨🇭',AT:'🇦🇹',PL:'🇵🇱',SE:'🇸🇪',DK:'🇩🇰',NO:'🇳🇴',FI:'🇫🇮' };
 
@@ -36,7 +36,7 @@ function closeModal() {
 }
 
 function channelBadge(ch) {
-  const m = { airbnb:'badge-red', booking:'badge-blue', livvi:'badge-purple', direct:'badge-green' };
+  const m = { airbnb:'badge-red', booking:'badge-blue', livvi:'badge-purple', direct:'badge-green', website:'badge-teal' };
   return `<span class="badge ${m[ch]||'badge-gray'}">${CHANNELS[ch]||ch}</span>`;
 }
 function statusBadge(s) {

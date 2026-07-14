@@ -9,7 +9,7 @@ import os, shutil, logging
 
 from .database import engine, Base
 from . import models
-from .routers import auth, properties, reservations, transactions, cleaning, messages, ota, settings
+from .routers import auth, properties, reservations, transactions, cleaning, messages, ota, settings, public
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,6 +26,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(_daily_backup, "cron", hour=3, minute=0)
     scheduler.add_job(ota.auto_sync_all, "interval", minutes=15)
     scheduler.add_job(_self_ping, "interval", minutes=10)
+    scheduler.add_job(_expire_stale_booking_requests, "interval", hours=1)
     scheduler.start()
     logger.info("AL Manager started")
     yield
@@ -50,6 +51,7 @@ app.include_router(cleaning.router)
 app.include_router(messages.router)
 app.include_router(ota.router)
 app.include_router(settings.router)
+app.include_router(public.router)
 
 # ── Static frontend ──
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
@@ -80,6 +82,31 @@ async def _self_ping():
     except Exception as e:
         logger.warning(f"Self-ping falhou: {e}")
 
+
+def _expire_stale_booking_requests():
+    """Cancel pending website booking requests whose Stripe checkout was never completed
+    within 24h — otherwise an abandoned checkout would block those dates forever."""
+    from datetime import datetime, timezone, timedelta
+    from .database import SessionLocal
+    db = SessionLocal()
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+        stale = db.query(models.Reservation).filter(
+            models.Reservation.channel == "website",
+            models.Reservation.status == "pending",
+            models.Reservation.deposit_status == "awaiting_payment",
+            models.Reservation.created_at < cutoff,
+        ).all()
+        for r in stale:
+            r.status = "cancelled"
+            logger.info(f"Pedido de reserva expirado (sem pagamento em 24h): {r.id}")
+        if stale:
+            db.commit()
+    except Exception as e:
+        logger.error(f"Erro ao expirar pedidos de reserva pendentes: {e}", exc_info=True)
+    finally:
+        db.close()
+
 # ── Schema migrations (ADD COLUMN IF NOT EXISTS) ──
 def _run_migrations():
     """Add new columns to existing tables without dropping data."""
@@ -88,6 +115,10 @@ def _run_migrations():
         "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS access_pin VARCHAR DEFAULT ''",
         "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS room VARCHAR DEFAULT ''",
         "ALTER TABLE properties ADD COLUMN IF NOT EXISTS livvi_door_ids VARCHAR DEFAULT ''",
+        "ALTER TABLE properties ADD COLUMN IF NOT EXISTS nightly_rate FLOAT DEFAULT 0",
+        "ALTER TABLE properties ADD COLUMN IF NOT EXISTS public_bookable BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS deposit_status VARCHAR DEFAULT ''",
+        "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS stripe_session_id VARCHAR DEFAULT ''",
         """CREATE TABLE IF NOT EXISTS ota_links (
             id TEXT PRIMARY KEY, prop_id TEXT NOT NULL, channel TEXT NOT NULL,
             ical_url TEXT DEFAULT '', last_sync TEXT DEFAULT '', active BOOLEAN DEFAULT TRUE

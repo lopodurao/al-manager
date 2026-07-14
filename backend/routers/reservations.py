@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from .. import models, schemas, auth
 from ..database import get_db
+from ..booking_logic import check_overlap as _check_overlap
 import uuid
 
 router = APIRouter(prefix="/api/reservations", tags=["reservations"])
@@ -21,22 +22,6 @@ def list_reservations(
 
 import logging as _logging
 _log = _logging.getLogger(__name__)
-
-def _check_overlap(db, prop_id: str, checkin: str, checkout: str, exclude_id: str = None):
-    """Raise 409 if there's a non-cancelled reservation overlapping these dates."""
-    q = db.query(models.Reservation).filter(
-        models.Reservation.prop_id == prop_id,
-        models.Reservation.status != "cancelled",
-        models.Reservation.checkin < checkout,
-        models.Reservation.checkout > checkin,
-    )
-    if exclude_id:
-        q = q.filter(models.Reservation.id != exclude_id)
-    conflict = q.first()
-    if conflict:
-        msg = f"Já existe uma reserva de {conflict.checkin} a {conflict.checkout} ({conflict.guest_name})"
-        _log.warning(f"Sobreposição detectada: prop={prop_id} {checkin}→{checkout} vs {conflict.checkin}→{conflict.checkout} ({conflict.guest_name})")
-        raise HTTPException(409, msg)
 
 async def _livvi_and_email_bg(reservation_id: str):
     """Background task: create Livvi PIN and send confirmation email."""
@@ -118,6 +103,7 @@ async def update_reservation(rid: str, data: schemas.ReservationUpdate, backgrou
     r = db.query(models.Reservation).filter(models.Reservation.id == rid).first()
     if not r: raise HTTPException(404, "Reserva não encontrada")
     was_active = r.status != "cancelled"
+    was_confirmed = r.status == "confirmed"
     if data.status != "cancelled":
         _check_overlap(db, data.prop_id, data.checkin, data.checkout, exclude_id=rid)
     for k, v in data.model_dump().items():
@@ -130,6 +116,10 @@ async def update_reservation(rid: str, data: schemas.ReservationUpdate, backgrou
             await livvi_service.delete_booking(r.livvi_booking_id)
         if r.guest_email:
             background_tasks.add_task(_send_cancellation, r.id)
+    # Reservation just confirmed (e.g. owner approving a pending website request):
+    # create Livvi PIN + send confirmation email, same as a brand-new confirmed reservation.
+    elif not was_confirmed and r.status == "confirmed":
+        background_tasks.add_task(_livvi_and_email_bg, r.id)
     return r
 
 
