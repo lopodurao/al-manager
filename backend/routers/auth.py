@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
 from .. import models, schemas, auth
 from ..database import get_db
-import uuid
+import uuid, os
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -39,3 +39,20 @@ def me(current_user=Depends(auth.get_current_user)):
 @router.get("/setup-needed")
 def setup_needed(db: Session = Depends(get_db)):
     return {"setup_needed": db.query(models.User).count() == 0}
+
+@router.post("/admin-create", response_model=schemas.UserOut)
+def admin_create(data: schemas.UserCreate, x_admin_secret: str = Header(...), db: Session = Depends(get_db)):
+    """Create a user using the ADMIN_SECRET env var — for bootstrap only."""
+    secret = os.getenv("ADMIN_SECRET", "")
+    if not secret or x_admin_secret != secret:
+        raise HTTPException(status_code=403, detail="Segredo inválido")
+    if db.query(models.User).filter(models.User.username == data.username).first():
+        raise HTTPException(status_code=400, detail="Username já existe")
+    user = models.User(
+        id=str(uuid.uuid4()),
+        username=data.username,
+        email=data.email,
+        hashed_password=auth.hash_password(data.password),
+    )
+    db.add(user); db.commit(); db.refresh(user)
+    return user
