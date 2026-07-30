@@ -90,15 +90,17 @@ function propertyForm(p) {
       Aparece no motor de reservas do site com a tarifa abaixo. Pedidos entram como "Pendente" para confirmares aqui.
     </div>
     <div class="form-group" style="margin:0"><label>Tarifa por noite (€)</label><input type="number" id="pf-rate" value="${p?.nightly_rate||0}" min="0" step="0.01"></div>
+    <div class="form-group" style="margin-top:10px;margin-bottom:0"><label>Estadia mínima (noites)</label><input type="number" id="pf-min-nights" value="${p?.min_nights||1}" min="1"></div>
+    <div class="form-group" style="margin-top:10px"><label>Descrição pública</label><textarea id="pf-description" rows="3" placeholder="Breve descrição que aparece no motor de reservas do site">${escHtml(p?.description||'')}</textarea></div>
   </div>
-  <div class="form-group"><label>Notas</label><textarea id="pf-notes">${escHtml(p?.notes||'')}</textarea></div>
+  <div class="form-group"><label>Notas (internas)</label><textarea id="pf-notes">${escHtml(p?.notes||'')}</textarea></div>
   <div class="form-actions">
     <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
     <button class="btn btn-primary" id="save-prop-btn">Guardar</button>
   </div>`;
 }
 async function doSaveProperty(id) {
-  const d = { name:document.getElementById('pf-name').value.trim(), address:document.getElementById('pf-addr').value.trim(), type:document.getElementById('pf-type').value, license:document.getElementById('pf-license').value.trim(), color:document.getElementById('pf-color').value, rooms:+document.getElementById('pf-rooms').value, beds:+document.getElementById('pf-beds').value, baths:+document.getElementById('pf-baths').value, max_guests:+document.getElementById('pf-guests').value, livvi_door_ids:document.getElementById('pf-livvi').value.trim(), notes:document.getElementById('pf-notes').value, public_bookable:document.getElementById('pf-bookable').checked, nightly_rate:+document.getElementById('pf-rate').value };
+  const d = { name:document.getElementById('pf-name').value.trim(), address:document.getElementById('pf-addr').value.trim(), type:document.getElementById('pf-type').value, license:document.getElementById('pf-license').value.trim(), color:document.getElementById('pf-color').value, rooms:+document.getElementById('pf-rooms').value, beds:+document.getElementById('pf-beds').value, baths:+document.getElementById('pf-baths').value, max_guests:+document.getElementById('pf-guests').value, livvi_door_ids:document.getElementById('pf-livvi').value.trim(), notes:document.getElementById('pf-notes').value, public_bookable:document.getElementById('pf-bookable').checked, nightly_rate:+document.getElementById('pf-rate').value, min_nights:+document.getElementById('pf-min-nights').value||1, description:document.getElementById('pf-description').value };
   if (!d.name) { alert('Nome obrigatório'); return; }
   try {
     id ? await api.updateProperty(id, d) : await api.createProperty(d);

@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(_daily_backup, "cron", hour=3, minute=0)
     scheduler.add_job(ota.auto_sync_all, "interval", minutes=15)
     scheduler.add_job(_self_ping, "interval", minutes=10)
-    scheduler.add_job(_expire_stale_booking_requests, "interval", hours=1)
+    # scheduler.add_job(_expire_stale_booking_requests, "interval", hours=1)  # Stripe not used
     scheduler.start()
     logger.info("AL Manager started")
     yield
@@ -116,6 +116,8 @@ def _run_migrations():
         "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS room VARCHAR DEFAULT ''",
         "ALTER TABLE properties ADD COLUMN IF NOT EXISTS livvi_door_ids VARCHAR DEFAULT ''",
         "ALTER TABLE properties ADD COLUMN IF NOT EXISTS nightly_rate FLOAT DEFAULT 0",
+        "ALTER TABLE properties ADD COLUMN IF NOT EXISTS min_nights INTEGER DEFAULT 1",
+        "ALTER TABLE properties ADD COLUMN IF NOT EXISTS description TEXT DEFAULT ''",
         "ALTER TABLE properties ADD COLUMN IF NOT EXISTS public_bookable BOOLEAN DEFAULT FALSE",
         "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS deposit_status VARCHAR DEFAULT ''",
         "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS stripe_session_id VARCHAR DEFAULT ''",

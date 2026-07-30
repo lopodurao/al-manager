@@ -33,6 +33,8 @@ class PropertyCreate(BaseModel):
     livvi_door_ids: str = ""
     notes: str = ""
     nightly_rate: float = 0
+    min_nights: int = 1
+    description: str = ""
     public_bookable: bool = False
 
 class PropertyOut(PropertyCreate):
@@ -153,9 +155,12 @@ class PublicRoomOut(BaseModel):
     id: str
     name: str
     nightly_rate: float
+    min_nights: int = 1
+    description: str = ""
     max_guests: int
     beds: int
     baths: int
+    model_config = {"from_attributes": True}
 
 class PublicBookingRequest(BaseModel):
     prop_id: str
