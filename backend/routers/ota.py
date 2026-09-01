@@ -81,25 +81,64 @@ def _get_settings(db: Session) -> dict:
 
 
 def _parse_ical(text: str, prop_id: str, channel: str, db: Session) -> list:
-    """Parse iCal and return list of newly created Reservation objects."""
+    """Parse iCal and return list of newly created Reservation objects.
+
+    Airbnb and some OTAs export one VEVENT per blocked day instead of one per stay.
+    We detect consecutive single-day events with the same summary and merge them
+    into a single reservation before inserting.
+    """
+    from datetime import date as _date, timedelta as _td
+
     events = text.split("BEGIN:VEVENT")[1:]
-    new_reservations = []
+    parsed = []
     for ev in events:
-        def get(key):
-            m = re.search(rf"{key}[^:]*:([^\r\n]+)", ev)
+        def get(key, _ev=ev):
+            m = re.search(rf"{key}[^:]*:([^\r\n]+)", _ev)
             return m.group(1).strip() if m else ""
         dtstart = get("DTSTART").replace("T", "").replace("Z", "")[:8]
         dtend   = get("DTEND").replace("T",   "").replace("Z", "")[:8]
-        summary = get("SUMMARY")
-        uid     = get("UID")
-        desc    = get("DESCRIPTION")
         if len(dtstart) < 8 or len(dtend) < 8:
             continue
-        checkin  = f"{dtstart[:4]}-{dtstart[4:6]}-{dtstart[6:8]}"
-        checkout = f"{dtend[:4]}-{dtend[4:6]}-{dtend[6:8]}"
-        if db.query(models.Reservation).filter(models.Reservation.ical_uid == uid).first():
+        parsed.append({
+            "checkin":  f"{dtstart[:4]}-{dtstart[4:6]}-{dtstart[6:8]}",
+            "checkout": f"{dtend[:4]}-{dtend[4:6]}-{dtend[6:8]}",
+            "summary":  get("SUMMARY"),
+            "uid":      get("UID"),
+            "desc":     get("DESCRIPTION"),
+        })
+
+    # Sort by checkin so consecutive events are adjacent
+    parsed.sort(key=lambda e: e["checkin"])
+
+    # Merge consecutive single-day blocks with the same summary into one span
+    merged = []
+    for ev in parsed:
+        ci = ev["checkin"]; co = ev["checkout"]; sm = ev["summary"]
+        nights = (_date.fromisoformat(co) - _date.fromisoformat(ci)).days
+        if merged and nights == 1 and sm == merged[-1]["summary"] and ci == merged[-1]["checkout"]:
+            merged[-1]["checkout"] = co          # extend the previous block
+            merged[-1]["uid"] += f"|{ev['uid']}" # keep all UIDs for dedup
+        else:
+            merged.append(dict(ev))
+
+    new_reservations = []
+    for ev in merged:
+        checkin  = ev["checkin"]
+        checkout = ev["checkout"]
+        uid      = ev["uid"]
+        summary  = ev["summary"]
+        desc     = ev["desc"]
+
+        # Skip if ANY of the original UIDs already exists in the DB
+        already = False
+        for u in uid.split("|"):
+            if db.query(models.Reservation).filter(models.Reservation.ical_uid == u).first():
+                already = True
+                break
+        if already:
             continue
-        # Skip if this would overlap with an existing non-cancelled reservation
+
+        # Skip if overlapping with an existing non-cancelled reservation
         conflict = db.query(models.Reservation).filter(
             models.Reservation.prop_id == prop_id,
             models.Reservation.status != "cancelled",
@@ -107,20 +146,22 @@ def _parse_ical(text: str, prop_id: str, channel: str, db: Session) -> list:
             models.Reservation.checkout > checkin,
         ).first()
         if conflict:
-            logger.warning(f"iCal: ignorada sobreposição {checkin}→{checkout} (uid={uid}) com {conflict.guest_name} {conflict.checkin}→{conflict.checkout}")
+            logger.warning(f"iCal: ignorada sobreposição {checkin}→{checkout} com {conflict.guest_name} {conflict.checkin}→{conflict.checkout}")
             continue
-        # Extract email from DESCRIPTION if present
+
         email = ""
         email_match = re.search(r"[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}", desc or "")
         if email_match:
             email = email_match.group(0)
+
         res = models.Reservation(
             id=str(uuid.uuid4()), prop_id=prop_id,
             guest_name=summary or "Reserva importada",
             guest_email=email,
             checkin=checkin, checkout=checkout,
             channel=channel, status="confirmed",
-            ical_uid=uid, notes="Importado via iCal"
+            ical_uid=uid.split("|")[0],  # store first UID for reference
+            notes="Importado via iCal"
         )
         db.add(res)
         new_reservations.append(res)
