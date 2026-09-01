@@ -118,9 +118,10 @@ class OtaLink(Base):
     id        = Column(String, primary_key=True)
     prop_id   = Column(String, ForeignKey("properties.id"), nullable=False)
     channel   = Column(String, nullable=False)   # airbnb | booking | livvi | direct
-    ical_url  = Column(String, default="")       # URL to pull reservations FROM the OTA
-    last_sync = Column(String, default="")
-    active    = Column(Boolean, default=True)
+    ical_url       = Column(String, default="")   # URL to pull reservations FROM the OTA
+    linked_prop_ids= Column(String, default="")   # comma-sep prop_ids to also block (whole-property listings)
+    last_sync      = Column(String, default="")
+    active         = Column(Boolean, default=True)
 
 class Settings(Base):
     __tablename__ = "settings"

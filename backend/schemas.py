@@ -138,6 +138,7 @@ class OtaLinkCreate(BaseModel):
     prop_id: str
     channel: str
     ical_url: str = ""
+    linked_prop_ids: str = ""
     active: bool = True
 
 class OtaLinkOut(OtaLinkCreate):

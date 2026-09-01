@@ -69,10 +69,19 @@ async def sync_link(lid: str, db: Session = Depends(get_db), _=Auth):
         except Exception as e:
             raise HTTPException(502, f"Erro ao obter calendário: {e}")
     new_res = _parse_ical(resp.text, link.prop_id, link.channel, db)
+    # If this is a whole-property listing, mirror blocks to linked properties
+    for extra_prop_id in _linked_props(link):
+        new_res += _parse_ical(resp.text, extra_prop_id, link.channel, db)
     await _livvi_and_email(new_res, db)
     link.last_sync = str(date.today())
     db.commit()
     return {"imported": len(new_res)}
+
+
+def _linked_props(link) -> list:
+    """Return extra prop_ids to mirror blocks to (for whole-property OTA listings)."""
+    raw = getattr(link, "linked_prop_ids", "") or ""
+    return [p.strip() for p in raw.split(",") if p.strip() and p.strip() != link.prop_id]
 
 
 def _get_settings(db: Session) -> dict:
@@ -291,6 +300,8 @@ async def auto_sync_all():
                     resp = await client.get(link.ical_url)
                     resp.raise_for_status()
                     new_res = _parse_ical(resp.text, link.prop_id, link.channel, db)
+                    for extra_prop_id in _linked_props(link):
+                        new_res += _parse_ical(resp.text, extra_prop_id, link.channel, db)
                     if new_res:
                         await _livvi_and_email(new_res, db)
                         logger.info(f"Auto-sync {link.channel}/{prop_name}: {len(new_res)} novas reservas")

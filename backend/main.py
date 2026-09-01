@@ -125,6 +125,7 @@ def _run_migrations():
             id TEXT PRIMARY KEY, prop_id TEXT NOT NULL, channel TEXT NOT NULL,
             ical_url TEXT DEFAULT '', last_sync TEXT DEFAULT '', active BOOLEAN DEFAULT TRUE
         )""",
+        "ALTER TABLE ota_links ADD COLUMN IF NOT EXISTS linked_prop_ids TEXT DEFAULT ''",
     ]
     with engine.connect() as conn:
         for sql in migrations:

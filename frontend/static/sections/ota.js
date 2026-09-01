@@ -102,6 +102,16 @@ function _otaLinkForm(l, defaultPropId) {
       <input id="ol-url" value="${escHtml(l?.ical_url||'')}" placeholder="https://www.airbnb.com/calendar/ical/…">
       <div id="ol-hint" style="font-size:12px;color:var(--gray-500);margin-top:4px">${hint[l?.channel||'airbnb']||hint.airbnb}</div>
     </div>
+    <div class="form-group" style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:10px;padding:12px 14px">
+      <label style="font-weight:600">🏠 Listing "Propriedade Inteira" — bloquear também:</label>
+      <div style="font-size:12px;color:var(--gray-500);margin:4px 0 10px">Se este link do Airbnb corresponde à casa completa, seleciona as suites a bloquear quando chega uma reserva.</div>
+      <div style="display:flex;flex-direction:column;gap:6px" id="ol-linked-checks">
+        ${cache.properties.map(p=>{
+          const checked = (l?.linked_prop_ids||'').split(',').map(s=>s.trim()).includes(p.id);
+          return `<label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" class="ol-linked-cb" value="${p.id}" ${checked?'checked':''} style="width:14px;height:14px"> ${escHtml(p.name)}</label>`;
+        }).join('')}
+      </div>
+    </div>
     <div class="form-group"><label>Ativo</label><select id="ol-active"><option value="1" ${(l?.active??true)?'selected':''}>Sim — sincroniza automaticamente</option><option value="0" ${l?.active===false?'selected':''}>Não</option></select></div>
     <div class="form-actions"><button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="ol-save-btn">Guardar</button></div>`;
 }
@@ -118,7 +128,8 @@ function openEditOtaLink(id) {
 }
 
 async function doSaveOtaLink(id) {
-  const d = { prop_id: document.getElementById('ol-prop').value, channel: document.getElementById('ol-channel').value, ical_url: document.getElementById('ol-url').value.trim(), active: document.getElementById('ol-active').value === '1' };
+  const linkedIds = [...document.querySelectorAll('.ol-linked-cb:checked')].map(cb=>cb.value).join(',');
+  const d = { prop_id: document.getElementById('ol-prop').value, channel: document.getElementById('ol-channel').value, ical_url: document.getElementById('ol-url').value.trim(), linked_prop_ids: linkedIds, active: document.getElementById('ol-active').value === '1' };
   try {
     id ? await api.updateOtaLink(id, d) : await api.createOtaLink(d);
     closeModal(); await navigate('ota'); toastMsg('Link guardado');
