@@ -37,7 +37,7 @@ function renderCalendar(y, m, propFilter, res) {
   const firstDay = new Date(y,m,1).getDay();
   const daysInMonth = new Date(y,m+1,0).getDate();
   const todayStr = today();
-  const filtered = res.filter(r => r.status!=='cancelled' && (!propFilter||r.prop_id===propFilter));
+  const filtered = res.filter(r => r.status!=='cancelled' && r.status!=='blocked' && (!propFilter||r.prop_id===propFilter));
   let html = `<div class="calendar-grid">`;
   ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].forEach(d => { html+=`<div class="cal-day-header">${d}</div>`; });
   for(let i=0;i<firstDay;i++) html+=`<div class="cal-day other-month"></div>`;
@@ -53,6 +53,7 @@ function renderCalendar(y, m, propFilter, res) {
 }
 
 function renderResRows(list) {
+  list = list.filter(r => r.status !== 'blocked');
   if (!list.length) return '<tr><td colspan="9" class="text-center text-gray" style="padding:24px">Sem reservas</td></tr>';
   return list.sort((a,b)=>b.checkin.localeCompare(a.checkin)).map(r => {
     const p = getProp(r.prop_id);

@@ -40,7 +40,7 @@ function channelBadge(ch) {
   return `<span class="badge ${m[ch]||'badge-gray'}">${CHANNELS[ch]||ch}</span>`;
 }
 function statusBadge(s) {
-  const m = { confirmed:['badge-green','Confirmada'], pending:['badge-amber','Pendente'], cancelled:['badge-red','Cancelada'], checkedin:['badge-blue','Check-in'], checkedout:['badge-gray','Check-out'] };
+  const m = { confirmed:['badge-green','Confirmada'], pending:['badge-amber','Pendente'], cancelled:['badge-red','Cancelada'], blocked:['badge-gray','Bloqueado'], checkedin:['badge-blue','Check-in'], checkedout:['badge-gray','Check-out'] };
   const [cls,lbl] = m[s]||['badge-gray',s];
   return `<span class="badge ${cls}">${lbl}</span>`;
 }

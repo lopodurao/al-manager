@@ -163,13 +163,18 @@ def _parse_ical(text: str, prop_id: str, channel: str, db: Session) -> list:
         if email_match:
             email = email_match.group(0)
 
+        # Generic blocking events (host manually blocks dates on OTA) → status=blocked
+        BLOCKING_SUMMARIES = {"not available", "airbnb (not available)", "blocked",
+                              "closed", "unavailable", "indisponível", "bloqueado"}
+        is_block = (summary or "").lower().strip() in BLOCKING_SUMMARIES
         res = models.Reservation(
             id=str(uuid.uuid4()), prop_id=prop_id,
-            guest_name=summary or "Reserva importada",
+            guest_name=summary or "Bloqueado",
             guest_email=email,
             checkin=checkin, checkout=checkout,
-            channel=channel, status="confirmed",
-            ical_uid=uid.split("|")[0],  # store first UID for reference
+            channel=channel,
+            status="blocked" if is_block else "confirmed",
+            ical_uid=uid.split("|")[0],
             notes="Importado via iCal"
         )
         db.add(res)
