@@ -9,6 +9,9 @@ import uuid
 router = APIRouter(prefix="/api/reservations", tags=["reservations"])
 Auth = Depends(auth.get_current_user)
 
+def _extra_props(extra_prop_ids: str) -> list:
+    return [p.strip() for p in (extra_prop_ids or "").split(",") if p.strip()]
+
 @router.get("", response_model=List[schemas.ReservationOut])
 def list_reservations(
     prop_id: Optional[str] = Query(None),
@@ -36,6 +39,11 @@ async def _livvi_and_email_bg(reservation_id: str):
         if not r: return
         prop = db.query(models.Property).filter(models.Property.id == r.prop_id).first()
         door_ids = [d.strip() for d in (prop.livvi_door_ids or "").split(",") if d.strip()] if prop else []
+        # Collect door IDs from extra properties (whole-property booking)
+        for eid in _extra_props(r.extra_prop_ids or ""):
+            ep = db.query(models.Property).filter(models.Property.id == eid).first()
+            if ep:
+                door_ids += [d.strip() for d in (ep.livvi_door_ids or "").split(",") if d.strip()]
         livvi = await livvi_service.create_booking(
             reservation_id=r.id, guest_name=r.guest_name,
             guest_email=r.guest_email or "", checkin=r.checkin,
@@ -64,6 +72,8 @@ def create_reservation(data: schemas.ReservationCreate, background_tasks: Backgr
     if data.checkout <= data.checkin:
         raise HTTPException(400, "Check-out deve ser depois do check-in")
     _check_overlap(db, data.prop_id, data.checkin, data.checkout)
+    for eid in _extra_props(data.extra_prop_ids):
+        _check_overlap(db, eid, data.checkin, data.checkout)
     r = models.Reservation(id=str(uuid.uuid4()), **data.model_dump())
     db.add(r)
     if data.price > 0:
@@ -106,6 +116,8 @@ async def update_reservation(rid: str, data: schemas.ReservationUpdate, backgrou
     was_confirmed = r.status == "confirmed"
     if data.status != "cancelled":
         _check_overlap(db, data.prop_id, data.checkin, data.checkout, exclude_id=rid)
+        for eid in _extra_props(data.extra_prop_ids):
+            _check_overlap(db, eid, data.checkin, data.checkout, exclude_id=rid)
     for k, v in data.model_dump().items():
         setattr(r, k, v)
     db.commit(); db.refresh(r)

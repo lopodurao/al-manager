@@ -62,6 +62,7 @@ class ReservationCreate(BaseModel):
     notes: str = ""
     deposit_status: str = ""
     stripe_session_id: str = ""
+    extra_prop_ids: str = ""
 
 class ReservationOut(ReservationCreate):
     id: str

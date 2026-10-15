@@ -121,6 +121,7 @@ def _run_migrations():
         "ALTER TABLE properties ADD COLUMN IF NOT EXISTS public_bookable BOOLEAN DEFAULT FALSE",
         "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS deposit_status VARCHAR DEFAULT ''",
         "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS stripe_session_id VARCHAR DEFAULT ''",
+        "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS extra_prop_ids VARCHAR DEFAULT ''",
         """CREATE TABLE IF NOT EXISTS ota_links (
             id TEXT PRIMARY KEY, prop_id TEXT NOT NULL, channel TEXT NOT NULL,
             ical_url TEXT DEFAULT '', last_sync TEXT DEFAULT '', active BOOLEAN DEFAULT TRUE

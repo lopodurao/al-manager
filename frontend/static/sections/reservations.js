@@ -124,11 +124,25 @@ function reservationForm(r) {
     </div>
     <div class="form-group"></div>
   </div>
+  ${_extraPropsSection(r)}
   <div class="form-group"><label>Notas</label><textarea id="rf-notes">${escHtml(r?.notes||'')}</textarea></div>
   <div id="res-form-error" style="display:none;color:#dc2626;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;font-size:13.5px;margin-bottom:4px"></div>
   <div class="form-actions">
     <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
     <button class="btn btn-primary" id="save-res-btn">Guardar</button>
+  </div>`;
+}
+function _extraPropsSection(r) {
+  const others = cache.properties.filter(p => p.id !== (r?.prop_id || ''));
+  if (!others.length) return '';
+  const selected = (r?.extra_prop_ids || '').split(',').map(s => s.trim()).filter(Boolean);
+  return `<div class="form-group" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;margin-bottom:4px">
+    <label style="font-weight:600;margin-bottom:8px;display:block">🏠 Reserva Propriedade Inteira — incluir também</label>
+    <div style="font-size:12.5px;color:#64748b;margin-bottom:10px">Seleciona suites adicionais para bloquear e incluir no mesmo PIN Livvi</div>
+    ${others.map(p=>`<label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer">
+      <input type="checkbox" class="rf-extra-prop" value="${p.id}" ${selected.includes(p.id)?'checked':''} style="width:16px;height:16px">
+      <span>${escHtml(p.name)}</span>
+    </label>`).join('')}
   </div>`;
 }
 function _roomOptions() {
@@ -144,7 +158,8 @@ async function doSaveReservation(id) {
   const name = document.getElementById('rf-name').value.trim();
   if (!name||!checkin||!checkout) { alert('Preenche os campos obrigatórios'); return; }
   if (checkout<=checkin) { alert('Check-out deve ser depois do check-in'); return; }
-  const d = { prop_id:document.getElementById('rf-prop').value, guest_name:name, guest_email:document.getElementById('rf-email').value.trim(), guest_phone:document.getElementById('rf-phone').value.trim(), guest_nationality:document.getElementById('rf-nat').value, doc_id:document.getElementById('rf-doc').value.trim(), guests:+document.getElementById('rf-guests').value, checkin, checkout, channel:document.getElementById('rf-channel').value, status:document.getElementById('rf-status').value, price:parseFloat(document.getElementById('rf-price').value)||0, commission:parseFloat(document.getElementById('rf-commission').value)||0, sef_reported:!!document.getElementById('rf-sef').value, room:document.getElementById('rf-room').value.trim(), notes:document.getElementById('rf-notes').value };
+  const extraProps = [...document.querySelectorAll('.rf-extra-prop:checked')].map(cb=>cb.value).join(',');
+  const d = { prop_id:document.getElementById('rf-prop').value, guest_name:name, guest_email:document.getElementById('rf-email').value.trim(), guest_phone:document.getElementById('rf-phone').value.trim(), guest_nationality:document.getElementById('rf-nat').value, doc_id:document.getElementById('rf-doc').value.trim(), guests:+document.getElementById('rf-guests').value, checkin, checkout, channel:document.getElementById('rf-channel').value, status:document.getElementById('rf-status').value, price:parseFloat(document.getElementById('rf-price').value)||0, commission:parseFloat(document.getElementById('rf-commission').value)||0, sef_reported:!!document.getElementById('rf-sef').value, room:document.getElementById('rf-room').value.trim(), notes:document.getElementById('rf-notes').value, extra_prop_ids:extraProps };
   const btn = document.getElementById('save-res-btn');
   const isNew = !id && d.status === 'confirmed';
   const errBox = document.getElementById('res-form-error');

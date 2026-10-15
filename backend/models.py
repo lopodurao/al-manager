@@ -61,6 +61,7 @@ class Reservation(Base):
     access_pin         = Column(String, default="")
     deposit_status     = Column(String, default="")
     stripe_session_id  = Column(String, default="")
+    extra_prop_ids     = Column(String, default="")  # comma-sep prop_ids for whole-property bookings
     notes              = Column(Text, default="")
     created_at       = Column(DateTime, default=now_utc)
     property = relationship("Property", back_populates="reservations")
