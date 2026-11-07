@@ -9,7 +9,7 @@ import os, shutil, logging
 
 from .database import engine, Base
 from . import models
-from .routers import auth, properties, reservations, transactions, cleaning, messages, ota, settings, public
+from .routers import auth, properties, reservations, transactions, cleaning, messages, ota, settings, public, smoobu
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,6 +25,7 @@ async def lifespan(app: FastAPI):
     scheduler = AsyncIOScheduler()
     scheduler.add_job(_daily_backup, "cron", hour=3, minute=0)
     scheduler.add_job(ota.auto_sync_all, "interval", minutes=15)
+    scheduler.add_job(smoobu.sync_smoobu, "interval", hours=1)
     scheduler.add_job(_self_ping, "interval", minutes=10)
     # scheduler.add_job(_expire_stale_booking_requests, "interval", hours=1)  # Stripe not used
     scheduler.start()
@@ -52,6 +53,7 @@ app.include_router(messages.router)
 app.include_router(ota.router)
 app.include_router(settings.router)
 app.include_router(public.router)
+app.include_router(smoobu.router)
 
 # ── Static frontend ──
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
