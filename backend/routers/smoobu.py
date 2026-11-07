@@ -179,6 +179,14 @@ async def smoobu_webhook(request: Request, background_tasks: BackgroundTasks):
     logger.info(f"Smoobu webhook payload: {payload}")
 
     action  = payload.get("action", "")   # "booking", "cancellation", etc.
+
+    # Ignore non-reservation events (rate updates, messages, etc.)
+    reservation_actions = {"newReservation", "updateReservation", "cancelReservation",
+                           "booking", "cancellation", "modification"}
+    if action and action not in reservation_actions:
+        logger.info(f"Smoobu webhook: ignorado evento '{action}'")
+        return {"ok": True, "skipped": True}
+
     booking = payload.get("booking") or payload.get("data") or payload
 
     smoobu_apt_id = str((booking.get("apartment") or {}).get("id") or booking.get("apartmentId") or "")
