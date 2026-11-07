@@ -157,7 +157,7 @@ def _upsert_reservation(db: Session, booking: dict, prop_id: str, extra_prop_ids
 
         r = models.Reservation(
             id=str(uuid.uuid4()), prop_id=prop_id,
-            guest_name=guest, guest_email=email, guest_phone=phone,
+            guest_name=guest_name, guest_email=email, guest_phone=phone,
             guests=guests_n, checkin=checkin, checkout=checkout,
             channel=channel, status=status,
             price=price, commission=0,
