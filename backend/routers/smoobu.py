@@ -103,13 +103,21 @@ def _upsert_reservation(db: Session, booking: dict, prop_id: str, extra_prop_ids
             db.commit()
             logger.info(f"Smoobu reserva {smoobu_id} cancelada")
             return existing.livvi_booking_id or True  # return livvi_id so caller can delete it
-        # Update fields that may change
+        # Check if dates changed — if so, need to recreate Livvi PIN
+        dates_changed = (existing.checkin != checkin or existing.checkout != checkout)
+        old_livvi_id  = existing.livvi_booking_id if dates_changed else None
         existing.checkin  = checkin
         existing.checkout = checkout
         existing.price    = price
         existing.extra_prop_ids = extra_prop_ids
+        if dates_changed:
+            existing.livvi_booking_id = ""
+            existing.access_pin = ""
         db.commit()
-        return False  # no need to trigger Livvi again
+        # Return (livvi_id_to_delete, res_id_to_recreate) so caller can handle async
+        if dates_changed:
+            return ("update", old_livvi_id, existing.id)
+        return False
     else:
         if status == "cancelled":
             return False  # cancelled before we ever stored it
@@ -169,17 +177,25 @@ async def smoobu_webhook(request: Request, background_tasks: BackgroundTasks):
     try:
         result = _upsert_reservation(db, booking, prop_id, extra_ids)
         if result:
-            res = db.query(models.Reservation).filter(
-                models.Reservation.ical_uid == f"smoobu-{booking.get('id')}"
-            ).first()
-            if res and res.status == "confirmed":
-                # New confirmed reservation → Livvi PIN + email
-                from .reservations import _livvi_and_email_bg
-                background_tasks.add_task(_livvi_and_email_bg, res.id)
+            from .reservations import _livvi_and_email_bg
+            from .. import livvi_service
+
+            if isinstance(result, tuple) and result[0] == "update":
+                # Dates changed → delete old PIN, create new one
+                _, old_livvi_id, res_id = result
+                if old_livvi_id:
+                    background_tasks.add_task(livvi_service.delete_booking, old_livvi_id)
+                background_tasks.add_task(_livvi_and_email_bg, res_id)
             elif isinstance(result, str) and result:
-                # Cancelled reservation → delete Livvi PIN
-                from .. import livvi_service
+                # Cancelled → delete Livvi PIN
                 background_tasks.add_task(livvi_service.delete_booking, result)
+            elif result is True:
+                # New confirmed reservation → PIN + email
+                res = db.query(models.Reservation).filter(
+                    models.Reservation.ical_uid == f"smoobu-{booking.get('id')}"
+                ).first()
+                if res and res.status == "confirmed":
+                    background_tasks.add_task(_livvi_and_email_bg, res.id)
     finally:
         db.close()
 
