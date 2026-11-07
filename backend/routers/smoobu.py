@@ -103,21 +103,36 @@ def _upsert_reservation(db: Session, booking: dict, prop_id: str, extra_prop_ids
             db.commit()
             logger.info(f"Smoobu reserva {smoobu_id} cancelada")
             return existing.livvi_booking_id or True  # return livvi_id so caller can delete it
-        # Check if dates changed — if so, need to recreate Livvi PIN
+        # Check if dates changed — if so, may need to recreate Livvi PIN
         dates_changed = (existing.checkin != checkin or existing.checkout != checkout)
-        old_livvi_id  = existing.livvi_booking_id if dates_changed else None
+        if not dates_changed:
+            existing.price = price
+            existing.extra_prop_ids = extra_prop_ids
+            db.commit()
+            return False
+
+        from datetime import date as _date
+        today_str = _date.today().isoformat()
+        active_stay = (existing.checkin <= today_str < existing.checkout)
+        checkout_shortened = checkout < existing.checkout  # security risk — must recreate
+
+        old_livvi_id = existing.livvi_booking_id
+        old_checkout = existing.checkout
         existing.checkin  = checkin
         existing.checkout = checkout
         existing.price    = price
         existing.extra_prop_ids = extra_prop_ids
-        if dates_changed:
+
+        if active_stay and not checkout_shortened:
+            # Guest is in-house and checkout extended — keep old PIN, create extra booking
+            db.commit()
+            return ("extend", old_livvi_id, existing.id)
+        else:
+            # Checkout shortened OR not yet checked in — delete old PIN and recreate
             existing.livvi_booking_id = ""
             existing.access_pin = ""
-        db.commit()
-        # Return (livvi_id_to_delete, res_id_to_recreate) so caller can handle async
-        if dates_changed:
+            db.commit()
             return ("update", old_livvi_id, existing.id)
-        return False
     else:
         if status == "cancelled":
             return False  # cancelled before we ever stored it
@@ -181,10 +196,14 @@ async def smoobu_webhook(request: Request, background_tasks: BackgroundTasks):
             from .. import livvi_service
 
             if isinstance(result, tuple) and result[0] == "update":
-                # Dates changed → delete old PIN, create new one
+                # Dates changed (or checkout shortened) → delete old PIN, create new
                 _, old_livvi_id, res_id = result
                 if old_livvi_id:
                     background_tasks.add_task(livvi_service.delete_booking, old_livvi_id)
+                background_tasks.add_task(_livvi_and_email_bg, res_id)
+            elif isinstance(result, tuple) and result[0] == "extend":
+                # Guest in-house, checkout extended → keep old PIN, just notify new dates
+                _, _old_livvi_id, res_id = result
                 background_tasks.add_task(_livvi_and_email_bg, res_id)
             elif isinstance(result, str) and result:
                 # Cancelled → delete Livvi PIN
