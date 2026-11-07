@@ -75,22 +75,31 @@ def _upsert_reservation(db: Session, booking: dict, prop_id: str, extra_prop_ids
     if not checkin or not checkout:
         return False
 
-    # Map Smoobu status
-    smoobu_status = booking.get("type", {}).get("name", "") if isinstance(booking.get("type"), dict) else booking.get("type", "")
-    if smoobu_status in ("cancelled", "declined"):
+    # Map Smoobu status — type is a string "reservation"/"cancelled"/etc.
+    smoobu_type = booking.get("type") or ""
+    if isinstance(smoobu_type, dict):
+        smoobu_type = smoobu_type.get("name", "")
+    if smoobu_type in ("cancelled", "declined") or booking.get("is-blocked-booking"):
         status = "cancelled"
     else:
         status = "confirmed"
 
-    guest      = booking.get("guestName", booking.get("guest-name", "")) or "Smoobu Guest"
+    # Smoobu uses hyphenated field names
+    firstname  = booking.get("firstname", "") or ""
+    lastname   = booking.get("lastname", "") or ""
+    guest_name = booking.get("guest-name") or booking.get("guestName") or ""
+    if not guest_name:
+        guest_name = f"{firstname} {lastname}".strip() or "Smoobu Guest"
     email      = booking.get("email", "") or ""
     phone      = booking.get("phone", "") or ""
-    guests_n   = int(booking.get("adults", 1) or 1) + int(booking.get("children", 0) or 0)
-    price      = float(booking.get("price", 0) or 0)
-    channel    = (booking.get("channel", {}) or {}).get("name", "smoobu").lower().replace(" ", "_") if isinstance(booking.get("channel"), dict) else "smoobu"
-    # Normalise channel slug
-    channel_map = {"airbnb": "airbnb", "booking.com": "booking", "smoobu direct": "direct"}
-    channel = channel_map.get(channel, "smoobu")
+    adults     = int(booking.get("adults") or 1)
+    children   = int(booking.get("children") or 0)
+    guests_n   = adults + children
+    price      = float(booking.get("price") or 0)
+    ch_name    = (booking.get("channel") or {}).get("name", "smoobu").lower()
+    channel_map = {"airbnb": "airbnb", "booking.com": "booking", "smoobu direct": "direct",
+                   "direct booking": "direct"}
+    channel = channel_map.get(ch_name, "smoobu")
 
     # Look up existing by smoobu ID stored in ical_uid
     existing = db.query(models.Reservation).filter(
@@ -167,12 +176,12 @@ def _upsert_reservation(db: Session, booking: dict, prop_id: str, extra_prop_ids
 async def smoobu_webhook(request: Request, background_tasks: BackgroundTasks):
     """Receive Smoobu booking events (new / updated / cancelled)."""
     payload = await request.json()
-    logger.info(f"Smoobu webhook: {payload}")
+    logger.info(f"Smoobu webhook payload: {payload}")
 
     action  = payload.get("action", "")   # "booking", "cancellation", etc.
     booking = payload.get("booking") or payload.get("data") or payload
 
-    smoobu_apt_id = str(booking.get("apartmentId") or (booking.get("apartment") or {}).get("id", ""))
+    smoobu_apt_id = str((booking.get("apartment") or {}).get("id") or booking.get("apartmentId") or "")
     prop_map       = _prop_map()
     whole_map      = _whole_prop_map()
 
@@ -234,7 +243,7 @@ async def sync_smoobu():
         from datetime import date, timedelta
         today = date.today().isoformat()
         future = (date.today() + timedelta(days=180)).isoformat()
-        data = await _smoobu_get("/api/reservations", {"from": today, "to": future, "pageSize": "100"})
+        data = await _smoobu_get("/api/reservations", {"from": today, "to": future, "pageSize": "100", "showCancellation": "true"})
         bookings = data.get("bookings", [])
         db = SessionLocal()
         try:
