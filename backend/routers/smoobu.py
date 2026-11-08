@@ -79,7 +79,7 @@ def _upsert_reservation(db: Session, booking: dict, prop_id: str, extra_prop_ids
     smoobu_type = booking.get("type") or ""
     if isinstance(smoobu_type, dict):
         smoobu_type = smoobu_type.get("name", "")
-    if smoobu_type in ("cancelled", "declined") or booking.get("is-blocked-booking"):
+    if smoobu_type in ("cancelled", "declined", "cancellation") or booking.get("is-blocked-booking") or booking.get("_force_cancel"):
         status = "cancelled"
     else:
         status = "confirmed"
@@ -204,6 +204,11 @@ async def smoobu_webhook(request: Request, background_tasks: BackgroundTasks):
     else:
         logger.warning(f"Smoobu webhook: apartamento {smoobu_apt_id} não mapeado — configura SMOOBU_PROP_MAP")
         return {"ok": True, "skipped": True}
+
+    # Force cancellation flag into booking dict so _upsert_reservation handles it correctly
+    if action == "cancelReservation":
+        booking = dict(booking)
+        booking["_force_cancel"] = True
 
     db = SessionLocal()
     try:
