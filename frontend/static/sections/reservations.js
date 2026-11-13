@@ -27,7 +27,7 @@ async function renderReservations() {
   <div class="card-title" style="margin-bottom:12px">Lista de Reservas</div>
   <input style="margin-bottom:12px" placeholder="Pesquisar hóspede…" oninput="filterResTable(this.value)">
   <div class="table-wrap"><table id="res-table">
-    <thead><tr><th>Hóspede</th><th>Propriedade</th><th>Check-in</th><th>Check-out</th><th>Noites</th><th>Canal</th><th>Estado</th><th>Valor</th><th></th></tr></thead>
+    <thead><tr><th>Hóspede</th><th>Propriedade</th><th>Check-in</th><th>Check-out</th><th>Noites</th><th>Canal</th><th>Estado</th><th>PIN</th><th>Valor</th><th></th></tr></thead>
     <tbody>${renderResRows(res)}</tbody>
   </table></div>
 </div>`;
@@ -61,7 +61,9 @@ function renderResRows(list) {
       <td>${FLAG[r.guest_nationality]||''} <strong>${escHtml(r.guest_name)}</strong><br><span class="text-sm text-gray">${escHtml(r.guest_email)}</span></td>
       <td>${p?p.name:'—'}</td><td>${fmtDate(r.checkin)}</td><td>${fmtDate(r.checkout)}</td>
       <td>${nights(r.checkin,r.checkout)}</td><td>${channelBadge(r.channel)}</td>
-      <td>${statusBadge(r.status)}</td><td class="fw-700">${fmtMoney(r.price)}</td>
+      <td>${statusBadge(r.status)}</td>
+      <td style="font-family:monospace;font-weight:700;font-size:15px;color:#15803d">${r.access_pin ? escHtml(r.access_pin) : '<span style="color:#94a3b8;font-size:12px">—</span>'}</td>
+      <td class="fw-700">${fmtMoney(r.price)}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-sm btn-outline" onclick="editReservation('${r.id}')">Editar</button>
         ${r.guest_email ? `<button class="btn btn-sm btn-success" onclick="openSendInvoice('${r.id}','${escHtml(r.guest_email)}','${escHtml(r.guest_name)}')">📄 Fatura</button>` : ''}
@@ -124,6 +126,13 @@ function reservationForm(r) {
     </div>
     <div class="form-group"></div>
   </div>
+  ${r?.access_pin ? `<div style="background:#f0fdf4;border:2px solid #22c55e;border-radius:10px;padding:14px 18px;margin-bottom:12px;display:flex;align-items:center;gap:14px">
+    <span style="font-size:28px">🔑</span>
+    <div>
+      <div style="font-size:11px;font-weight:600;color:#166534;text-transform:uppercase;letter-spacing:.05em">Código de Acesso Livvi</div>
+      <div style="font-size:28px;font-weight:800;letter-spacing:4px;color:#15803d;font-family:monospace">${escHtml(r.access_pin)}</div>
+    </div>
+  </div>` : (r ? `<div style="background:#fafafa;border:1px dashed #cbd5e1;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#64748b">🔑 PIN Livvi ainda não gerado</div>` : '')}
   ${_extraPropsSection(r)}
   <div class="form-group"><label>Notas</label><textarea id="rf-notes">${escHtml(r?.notes||'')}</textarea></div>
   <div id="res-form-error" style="display:none;color:#dc2626;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;font-size:13.5px;margin-bottom:4px"></div>
