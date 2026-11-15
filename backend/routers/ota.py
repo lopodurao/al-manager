@@ -166,8 +166,10 @@ def _parse_ical(text: str, prop_id: str, channel: str, db: Session) -> list:
         # Skip generic "Not available" blocking events — Airbnb generates these automatically
         # and they clutter the DB. Actual guest reservations have real names.
         BLOCKING_SUMMARIES = {"not available", "airbnb (not available)", "blocked",
-                              "closed", "unavailable", "indisponível", "bloqueado"}
-        if (summary or "").lower().strip() in BLOCKING_SUMMARIES:
+                              "closed", "unavailable", "indisponível", "bloqueado",
+                              "closed - not available", "booking.com (not available)"}
+        summary_lower = (summary or "").lower().strip()
+        if summary_lower in BLOCKING_SUMMARIES or summary_lower.startswith("closed -"):
             continue
         res = models.Reservation(
             id=str(uuid.uuid4()), prop_id=prop_id,
