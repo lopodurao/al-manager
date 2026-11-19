@@ -53,6 +53,18 @@ def _smoobu_headers(method: str, path: str, query: str = "", body: bytes = b"") 
     return {"X-API-Key": SMOOBU_API_KEY, "X-Timestamp": ts, "X-Nonce": nonce, "X-Signature": sig}
 
 
+async def _smoobu_put(path: str, body: dict) -> dict:
+    """PUT request to Smoobu API (e.g. update reservation notice with Livvi PIN)."""
+    import json as _json
+    body_bytes = _json.dumps(body).encode()
+    headers = _smoobu_headers("PUT", path, "", body_bytes)
+    headers["Content-Type"] = "application/json"
+    url = SMOOBU_BASE + path
+    async with httpx.AsyncClient(timeout=15) as c:
+        r = await c.put(url, headers=headers, content=body_bytes)
+        return r.json()
+
+
 async def _smoobu_get(path: str, params: dict = None) -> dict:
     import urllib.parse
     query = urllib.parse.urlencode(sorted((params or {}).items()))
