@@ -45,113 +45,103 @@ def send_booking_confirmation(reservation, property_obj, settings: dict, access_
     if not reservation.guest_email:
         return False
 
+    checkin_time  = settings.get("checkinTime",  "15:00")
+    checkout_time = settings.get("checkoutTime", "11:00")
+    access_code   = settings.get("accessCode",   "—")
+    key_location  = settings.get("keyLocation",  "—")
     owner_phone   = settings.get("ownerPhone",   "—")
-    wifi_network  = settings.get("wifiNetwork",  "")
-    wifi_password = settings.get("wifiPassword", "")
     prop_name     = property_obj.name if property_obj else "Alojamento"
-    prop_addr     = property_obj.address if property_obj else "Avenida Portugal 800, 2765-272 Estoril, Portugal"
+    prop_addr     = property_obj.address if property_obj else ""
 
-    first_name = reservation.guest_name.split()[0] if reservation.guest_name else reservation.guest_name
-    pin = access_pin if access_pin and access_pin != "—" else ""
+    nights = (
+        __import__("datetime").date.fromisoformat(reservation.checkout) -
+        __import__("datetime").date.fromisoformat(reservation.checkin)
+    ).days
 
-    pin_block = f"""
-      <tr><td style="padding:16px 0 4px;font-size:13px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Your Access Code</td></tr>
-      <tr><td style="padding:4px 0 16px">
-        <div style="background:#f0fdf4;border:2px solid #22c55e;border-radius:10px;padding:14px 20px;display:inline-block">
-          <span style="font-size:28px;font-weight:800;letter-spacing:4px;color:#15803d;font-family:monospace">{pin}</span>
-        </div>
-      </td></tr>""" if pin else ""
+    channel_label = {
+        "airbnb": "Airbnb", "booking": "Booking.com",
+        "livvi": "Livvi", "direct": "Reserva Direta"
+    }.get(reservation.channel, reservation.channel)
 
-    html = f"""<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Check-in instructions – {prop_name}</title>
+    html = f"""
+<!DOCTYPE html>
+<html lang="pt">
+<head><meta charset="UTF-8">
+<style>
+  body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f7; margin: 0; padding: 24px; color: #1f2937; }}
+  .wrap {{ max-width: 580px; margin: 0 auto; }}
+  .header {{ background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 16px 16px 0 0; padding: 36px 32px; text-align: center; color: white; }}
+  .header h1 {{ margin: 0; font-size: 26px; font-weight: 800; }}
+  .header p  {{ margin: 8px 0 0; opacity: .85; font-size: 15px; }}
+  .body {{ background: white; border-radius: 0 0 16px 16px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,.08); }}
+  .greeting {{ font-size: 17px; font-weight: 600; margin-bottom: 20px; }}
+  .info-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0; }}
+  .info-box {{ background: #f9fafb; border-radius: 10px; padding: 14px 16px; border: 1px solid #e5e7eb; }}
+  .info-box .label {{ font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; font-weight: 600; margin-bottom: 4px; }}
+  .info-box .value {{ font-size: 15px; font-weight: 700; color: #111827; }}
+  .access {{ background: #eef2ff; border-radius: 12px; padding: 20px; margin: 24px 0; border-left: 4px solid #6366f1; }}
+  .access h3 {{ margin: 0 0 12px; color: #4338ca; font-size: 15px; }}
+  .access p  {{ margin: 6px 0; font-size: 14px; }}
+  .access strong {{ color: #111827; }}
+  .footer {{ margin-top: 28px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 13px; color: #6b7280; text-align: center; }}
+  .badge {{ display: inline-block; background: #d1fae5; color: #065f46; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; margin-bottom: 16px; }}
+</style>
 </head>
-<body style="font-family:'Segoe UI',Arial,sans-serif;background:#f4f4f4;margin:0;padding:24px;color:#1f2937">
-<div style="max-width:580px;margin:0 auto">
-
-  <div style="background:#1e293b;border-radius:12px 12px 0 0;padding:32px;text-align:center;color:white">
-    <div style="font-size:28px;margin-bottom:8px">🏠</div>
-    <h1 style="margin:0;font-size:22px;font-weight:800">{prop_name}</h1>
-    <p style="margin:6px 0 0;opacity:.75;font-size:14px">Check-in instructions – Estoril</p>
+<body>
+<div class="wrap">
+  <div class="header">
+    <h1>🏠 {prop_name}</h1>
+    <p>Confirmação de reserva</p>
   </div>
-
-  <div style="background:white;border-radius:0 0 12px 12px;padding:32px;box-shadow:0 4px 20px rgba(0,0,0,.08)">
-    <p style="font-size:16px;font-weight:600;margin:0 0 12px">Dear {first_name},</p>
-    <p style="color:#4b5563;line-height:1.7;margin:0 0 24px">
-      We are looking forward to welcoming you to {prop_name} in Estoril!
-      Ahead of your arrival, here are your check-in details and step-by-step instructions
-      so you can settle in smoothly.
+  <div class="body">
+    <span class="badge">✓ Reserva confirmada via {channel_label}</span>
+    <div class="greeting">Olá {reservation.guest_name},</div>
+    <p style="color:#4b5563;line-height:1.7">
+      A sua reserva está confirmada! Estamos muito felizes por recebê-lo(a) em <strong>{prop_name}</strong>.
+      Encontra abaixo todos os detalhes da sua estadia.
     </p>
-
-    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
-      <tr><td colspan="2" style="padding-bottom:8px;font-size:15px;font-weight:700;color:#1e293b;border-bottom:2px solid #e5e7eb">Reservation &amp; Arrival Details</td></tr>
-      <tr>
-        <td style="padding:12px 16px 12px 0;font-size:13px;color:#6b7280;font-weight:600;width:40%">Check-in</td>
-        <td style="padding:12px 0;font-size:14px;font-weight:700">{reservation.checkin}, from 4:00 PM</td>
-      </tr>
-      <tr style="background:#f9fafb">
-        <td style="padding:12px 16px 12px 0;font-size:13px;color:#6b7280;font-weight:600">Check-out</td>
-        <td style="padding:12px 0;font-size:14px;font-weight:700">{reservation.checkout}, by 11:00 AM</td>
-      </tr>
-      <tr>
-        <td style="padding:12px 16px 12px 0;font-size:13px;color:#6b7280;font-weight:600">Accommodation</td>
-        <td style="padding:12px 0;font-size:14px;font-weight:700">{prop_name}</td>
-      </tr>
-      <tr style="background:#f9fafb">
-        <td style="padding:12px 16px 12px 0;font-size:13px;color:#6b7280;font-weight:600">Address</td>
-        <td style="padding:12px 0;font-size:14px">{prop_addr}</td>
-      </tr>
-      {pin_block}
-    </table>
-
-    <div style="margin:28px 0 0;padding-top:20px;border-top:2px solid #e5e7eb">
-      <p style="font-size:15px;font-weight:700;margin:0 0 16px;color:#1e293b">How to Enter</p>
-      <p style="font-size:14px;color:#374151;line-height:1.7;margin:0 0 12px">
-        <strong>Main Entrance:</strong> Upon arrival at Avenida Portugal 800, locate the intercom keypad
-        to the right of the door{f" and enter <strong style='font-family:monospace;color:#15803d'>{pin}</strong> to unlock it" if pin else " and enter your access code to unlock it"}.
-      </p>
-      <p style="font-size:14px;color:#374151;line-height:1.7;margin:0 0 12px">
-        <strong>Reaching the House:</strong> Once inside, walk up the stairs until you reach the house,
-        then turn right and continue until you find a wooden door.
-      </p>
-      <p style="font-size:14px;color:#374151;line-height:1.7;margin:0 0 12px">
-        <strong>Wooden Door:</strong> To unlock this door, wave your open hand vertically across the screen
-        (top to bottom or bottom to top) so the numbers light up.
-        Enter {"<strong style='font-family:monospace;color:#15803d'>" + pin + "</strong>" if pin else "your access code"} and press ✔️.
-      </p>
-      <p style="font-size:14px;color:#374151;line-height:1.7;margin:0">
-        <strong>Your Room ({prop_name}):</strong> Once inside the apartment, your assigned room is the
-        first door on the left. Use the same access code
-        {"(<strong style='font-family:monospace;color:#15803d'>" + pin + "</strong>) " if pin else ""}to enter.
-      </p>
+    <div class="info-grid">
+      <div class="info-box">
+        <div class="label">Check-in</div>
+        <div class="value">{reservation.checkin}</div>
+        <div style="font-size:13px;color:#6b7280;margin-top:2px">a partir das {checkin_time}h</div>
+      </div>
+      <div class="info-box">
+        <div class="label">Check-out</div>
+        <div class="value">{reservation.checkout}</div>
+        <div style="font-size:13px;color:#6b7280;margin-top:2px">até às {checkout_time}h</div>
+      </div>
+      <div class="info-box">
+        <div class="label">Duração</div>
+        <div class="value">{nights} noite{"s" if nights != 1 else ""}</div>
+      </div>
+      <div class="info-box">
+        <div class="label">Alojamento</div>
+        <div class="value" style="font-size:13px">{prop_name}</div>
+        {"<div style='font-size:12px;color:#6b7280;margin-top:2px'>" + prop_addr + "</div>" if prop_addr else ""}
+      </div>
     </div>
-
-    {"<div style='margin:24px 0 0;padding:16px 20px;background:#eff6ff;border-radius:10px;border-left:4px solid #3b82f6'><p style='margin:0;font-size:14px;color:#1e40af'><strong>Wi-Fi</strong> — Network: <strong>" + wifi_network + "</strong> · Password: <strong>" + wifi_password + "</strong></p></div>" if wifi_network else ""}
-
-    <p style="font-size:14px;color:#4b5563;line-height:1.7;margin:24px 0 0">
-      During your stay, you have complimentary access to the shared facilities applicable to your
-      reservation, including the garden and shared kitchenette.
+    <div class="access">
+      <h3>🔑 Instruções de acesso</h3>
+      {"<p>🔒 Código PIN da fechadura: <strong style='font-size:22px;letter-spacing:.15em;color:#4338ca'>" + access_pin + "</strong></p>" if access_pin and access_pin != "—" else f"<p>Código de acesso: <strong>{access_code}</strong></p>"}
+      <p>Chaves: <strong>{key_location}</strong></p>
+    </div>
+    <p style="color:#4b5563;font-size:14px;line-height:1.7">
+      Qualquer questão antes ou durante a estadia, contacte-nos pelo <strong>{owner_phone}</strong>.
+      Desejamos uma excelente estadia!
     </p>
-    <p style="font-size:14px;color:#4b5563;line-height:1.7;margin:12px 0 0">
-      If you have any questions or need assistance upon arrival, please do not hesitate to
-      contact us at <strong>{owner_phone}</strong>.
-    </p>
-    <p style="font-size:14px;color:#4b5563;line-height:1.7;margin:12px 0 24px">
-      Thank you for choosing {prop_name}, and we wish you a wonderful stay in Estoril!
-    </p>
-    <p style="font-size:14px;margin:0">Kind regards,<br><strong>The {prop_name} Team</strong></p>
-
-    <div style="margin-top:28px;padding-top:20px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;text-align:center">
+    <div class="footer">
+      Este email foi enviado automaticamente pelo sistema AL Manager.<br>
       {prop_name} · {prop_addr}
     </div>
   </div>
 </div>
 </body>
-</html>"""
+</html>
+"""
     return _send(
         to=reservation.guest_email,
-        subject=f"Check-in instructions – {prop_name}, Estoril | {reservation.checkin}",
+        subject=f"✓ Reserva confirmada — {prop_name} | {reservation.checkin} → {reservation.checkout}",
         html=html
     )
 

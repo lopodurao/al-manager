@@ -20,10 +20,6 @@ async function renderSettings() {
     <div class="form-group"><label>Taxa de limpeza (€)</label><input type="number" id="s-cleaning" value="${s.cleaningFee||40}" step="0.5"></div>
     <div class="form-group"><label>Código de acesso</label><input id="s-code" value="${escHtml(s.accessCode||'')}" placeholder="1234"></div>
     <div class="form-group"><label>Localização das chaves</label><input id="s-key" value="${escHtml(s.keyLocation||'')}" placeholder="Cofre na porta"></div>
-    <div class="form-row">
-      <div class="form-group"><label>Wi-Fi — Rede</label><input id="s-wifi-network" value="${escHtml(s.wifiNetwork||'')}" placeholder="CasaDaPenha_5G"></div>
-      <div class="form-group"><label>Wi-Fi — Password</label><input id="s-wifi-password" value="${escHtml(s.wifiPassword||'')}" placeholder="password123"></div>
-    </div>
   </div>
 </div>
 <div class="card mb-4">
@@ -103,7 +99,7 @@ function _collectLivviRooms() {
 }
 
 async function doSaveSettings() {
-  const d={ ownerName:document.getElementById('s-name').value.trim(), ownerNIF:document.getElementById('s-nif').value.trim(), ownerEmail:document.getElementById('s-email').value.trim(), ownerPhone:document.getElementById('s-phone').value.trim(), alLicense:document.getElementById('s-al').value.trim(), checkinTime:document.getElementById('s-checkin').value, checkoutTime:document.getElementById('s-checkout').value, cleaningFee:document.getElementById('s-cleaning').value, accessCode:document.getElementById('s-code').value.trim(), keyLocation:document.getElementById('s-key').value.trim(), wifiNetwork:document.getElementById('s-wifi-network').value.trim(), wifiPassword:document.getElementById('s-wifi-password').value.trim(), sefUser:document.getElementById('s-sefuser').value.trim(), sefPass:document.getElementById('s-sefpass').value };
+  const d={ ownerName:document.getElementById('s-name').value.trim(), ownerNIF:document.getElementById('s-nif').value.trim(), ownerEmail:document.getElementById('s-email').value.trim(), ownerPhone:document.getElementById('s-phone').value.trim(), alLicense:document.getElementById('s-al').value.trim(), checkinTime:document.getElementById('s-checkin').value, checkoutTime:document.getElementById('s-checkout').value, cleaningFee:document.getElementById('s-cleaning').value, accessCode:document.getElementById('s-code').value.trim(), keyLocation:document.getElementById('s-key').value.trim(), sefUser:document.getElementById('s-sefuser').value.trim(), sefPass:document.getElementById('s-sefpass').value };
   try { await api.updateSettings(d); Object.assign(cache.settings,d); toastMsg('Configurações guardadas'); }
   catch(e){ toastMsg('Erro: '+e.message); }
 }
