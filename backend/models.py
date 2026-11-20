@@ -102,6 +102,13 @@ class MessageTemplate(Base):
     subject  = Column(String, default="")
     body     = Column(Text, default="")
     active   = Column(Boolean, default=True)
+
+class MessageSent(Base):
+    __tablename__ = "messages_sent"
+    id          = Column(String, primary_key=True)
+    template_id = Column(String, nullable=False)
+    reservation_id = Column(String, nullable=False)
+    sent_at     = Column(DateTime, default=now_utc)
     created_at = Column(DateTime, default=now_utc)
 
 class OtaChannel(Base):

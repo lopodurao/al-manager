@@ -27,6 +27,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(ota.auto_sync_all, "interval", minutes=15)
     scheduler.add_job(smoobu.sync_smoobu, "interval", hours=1)
     scheduler.add_job(_self_ping, "interval", minutes=10)
+    scheduler.add_job(_send_scheduled_messages, "interval", minutes=30)
     # scheduler.add_job(_expire_stale_booking_requests, "interval", hours=1)  # Stripe not used
     scheduler.start()
     logger.info("AL Manager started")
@@ -129,6 +130,10 @@ def _run_migrations():
             ical_url TEXT DEFAULT '', last_sync TEXT DEFAULT '', active BOOLEAN DEFAULT TRUE
         )""",
         "ALTER TABLE ota_links ADD COLUMN IF NOT EXISTS linked_prop_ids TEXT DEFAULT ''",
+        """CREATE TABLE IF NOT EXISTS messages_sent (
+            id TEXT PRIMARY KEY, template_id TEXT NOT NULL,
+            reservation_id TEXT NOT NULL, sent_at TIMESTAMP
+        )""",
     ]
     with engine.connect() as conn:
         for sql in migrations:
@@ -179,6 +184,86 @@ def _seed_default_messages():
             db.commit()
     finally:
         db.close()
+
+def _send_scheduled_messages():
+    """Every 30 min: send active message templates whose trigger window has arrived."""
+    from datetime import datetime, timezone, timedelta
+    from .database import SessionLocal
+    from .email_service import _send
+    import uuid as _uuid
+    db = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+        today = now.date().isoformat()
+        templates = db.query(models.MessageTemplate).filter(models.MessageTemplate.active == True).all()
+        reservations = db.query(models.Reservation).filter(
+            models.Reservation.status == "confirmed",
+            models.Reservation.guest_email != "",
+            models.Reservation.guest_email != None,
+        ).all()
+        settings_rows = db.query(models.Settings).all()
+        s = {r.key: r.value for r in settings_rows}
+
+        for tpl in templates:
+            for res in reservations:
+                # Already sent?
+                already = db.query(models.MessageSent).filter(
+                    models.MessageSent.template_id == tpl.id,
+                    models.MessageSent.reservation_id == res.id,
+                ).first()
+                if already:
+                    continue
+
+                checkin  = res.checkin   # YYYY-MM-DD
+                checkout = res.checkout
+
+                # Check if trigger window applies (within current 30-min window)
+                target_dt = None
+                if tpl.trigger == "booking":
+                    continue  # sent at booking time only, not by scheduler
+                elif tpl.trigger == "checkin-1d":
+                    from datetime import date as _date
+                    target_dt = datetime.fromisoformat(checkin).replace(tzinfo=timezone.utc) - timedelta(days=1)
+                elif tpl.trigger == "checkin-2h":
+                    checkin_hour = int((s.get("checkinTime", "16:00") or "16:00").split(":")[0])
+                    target_dt = datetime.fromisoformat(checkin).replace(hour=checkin_hour, tzinfo=timezone.utc) - timedelta(hours=2)
+                elif tpl.trigger == "checkin-0d":
+                    checkin_hour = int((s.get("checkinTime", "16:00") or "16:00").split(":")[0])
+                    target_dt = datetime.fromisoformat(checkin).replace(hour=checkin_hour, tzinfo=timezone.utc)
+                elif tpl.trigger == "checkout-1d":
+                    target_dt = datetime.fromisoformat(checkout).replace(tzinfo=timezone.utc) - timedelta(days=1)
+                elif tpl.trigger == "checkout+1d":
+                    target_dt = datetime.fromisoformat(checkout).replace(tzinfo=timezone.utc) + timedelta(days=1)
+
+                if target_dt is None:
+                    continue
+
+                # Fire if target_dt is in the past 30 min window
+                if not (now - timedelta(minutes=30) <= target_dt <= now):
+                    continue
+
+                prop = db.query(models.Property).filter(models.Property.id == res.prop_id).first()
+                body = (tpl.body or "").replace("{{guest}}", res.guest_name or "") \
+                    .replace("{{property}}", prop.name if prop else "") \
+                    .replace("{{checkin_date}}", res.checkin or "") \
+                    .replace("{{checkout_date}}", res.checkout or "") \
+                    .replace("{{checkin_time}}", s.get("checkinTime", "16:00")) \
+                    .replace("{{checkout_time}}", s.get("checkoutTime", "11:00")) \
+                    .replace("{{access_code}}", res.access_pin or s.get("accessCode", "")) \
+                    .replace("{{key_location}}", s.get("keyLocation", ""))
+                subject = (tpl.subject or "").replace("{{property}}", prop.name if prop else "") \
+                    .replace("{{guest}}", res.guest_name or "")
+
+                sent = _send(res.guest_email, subject, f"<pre style='font-family:inherit;white-space:pre-wrap'>{body}</pre>")
+                if sent:
+                    db.add(models.MessageSent(id=str(_uuid.uuid4()), template_id=tpl.id, reservation_id=res.id))
+                    db.commit()
+                    logger.info(f"Mensagem automática '{tpl.name}' enviada → {res.guest_email} ({res.guest_name})")
+    except Exception as e:
+        logger.error(f"Erro scheduler mensagens: {e}", exc_info=True)
+    finally:
+        db.close()
+
 
 def _seed_ical_token():
     """Generate a random iCal secret token if not already set."""
