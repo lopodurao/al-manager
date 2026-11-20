@@ -3,7 +3,7 @@ async function renderMessages() {
 <div class="section-header"><h2>Mensagens Automáticas</h2><button class="btn btn-primary" onclick="openAddMessage()">+ Novo Template</button></div>
 <div class="card mb-4" style="background:var(--primary-light);border:1px solid #c7d2fe">
   <div style="font-size:13.5px;color:var(--primary-dark)"><strong>Variáveis:</strong>
-    ${['{{guest}}','{{property}}','{{checkin_time}}','{{checkout_time}}','{{access_code}}','{{key_location}}'].map(v=>`<code style="background:white;padding:1px 6px;border-radius:4px;margin:0 3px">${v}</code>`).join('')}
+    ${['{{guest}}','{{property}}','{{checkin_date}}','{{checkout_date}}','{{checkin_time}}','{{checkout_time}}','{{access_code}}','{{key_location}}'].map(v=>`<code style="background:white;padding:1px 6px;border-radius:4px;margin:0 3px">${v}</code>`).join('')}
   </div>
 </div>
 <div style="display:flex;flex-direction:column;gap:16px">
@@ -85,7 +85,7 @@ async function doSaveMessage(id) {
 function previewMessage(id) {
   const m=cache.messages.find(m=>m.id===id); const s=cache.settings;
   const r=cache.reservations[0]; const p=r?getProp(r.prop_id):null;
-  const body=(m.body||'').replace(/\{\{guest\}\}/g,r?.guest_name||'Hóspede').replace(/\{\{property\}\}/g,p?.name||'Propriedade').replace(/\{\{checkin_time\}\}/g,s.checkinTime||'15:00').replace(/\{\{checkout_time\}\}/g,s.checkoutTime||'11:00').replace(/\{\{access_code\}\}/g,s.accessCode||'1234').replace(/\{\{key_location\}\}/g,s.keyLocation||'');
+  const body=(m.body||'').replace(/\{\{guest\}\}/g,r?.guest_name||'Hóspede').replace(/\{\{property\}\}/g,p?.name||'Propriedade').replace(/\{\{checkin_date\}\}/g,r?.checkin||'').replace(/\{\{checkout_date\}\}/g,r?.checkout||'').replace(/\{\{checkin_time\}\}/g,s.checkinTime||'15:00').replace(/\{\{checkout_time\}\}/g,s.checkoutTime||'11:00').replace(/\{\{access_code\}\}/g,s.accessCode||'1234').replace(/\{\{key_location\}\}/g,s.keyLocation||'');
   openModal(`Preview: ${m.name}`,`<div style="font-size:13px;margin-bottom:8px"><strong>Assunto:</strong> ${escHtml(m.subject)}</div><div style="background:var(--gray-50);border-radius:8px;padding:16px;white-space:pre-line;font-size:13.5px;line-height:1.7">${escHtml(body)}</div><div class="form-actions"><button class="btn btn-secondary" onclick="closeModal()">Fechar</button></div>`);
 }
 
@@ -94,7 +94,7 @@ function loadMsgTemplate() {
   const m=cache.messages.find(x=>x.id===tplId); const s=cache.settings;
   const r=cache.reservations.find(x=>x.id===document.getElementById('manual-res').value); const p=r?getProp(r.prop_id):null;
   let body=m.body||'';
-  if(r) body=body.replace(/\{\{guest\}\}/g,r.guest_name).replace(/\{\{property\}\}/g,p?.name||'').replace(/\{\{checkin_time\}\}/g,s.checkinTime||'15:00').replace(/\{\{checkout_time\}\}/g,s.checkoutTime||'11:00').replace(/\{\{access_code\}\}/g,s.accessCode||'').replace(/\{\{key_location\}\}/g,s.keyLocation||'');
+  if(r) body=body.replace(/\{\{guest\}\}/g,r.guest_name).replace(/\{\{property\}\}/g,p?.name||'').replace(/\{\{checkin_date\}\}/g,r.checkin||'').replace(/\{\{checkout_date\}\}/g,r.checkout||'').replace(/\{\{checkin_time\}\}/g,s.checkinTime||'15:00').replace(/\{\{checkout_time\}\}/g,s.checkoutTime||'11:00').replace(/\{\{access_code\}\}/g,s.accessCode||'').replace(/\{\{key_location\}\}/g,s.keyLocation||'');
   document.getElementById('manual-msg').value=body;
 }
 
