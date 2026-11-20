@@ -53,16 +53,14 @@ async def _livvi_and_email_bg(reservation_id: str):
             r.livvi_booking_id = livvi.get("booking_id", "")
             r.access_pin = livvi.get("pin", "")
             db.commit()
-            # Push PIN to Smoobu notice field so Smoobu templates can use [notice]
-            if r.access_pin and (r.ical_uid or "").startswith("smoobu-"):
-                smoobu_id = r.ical_uid.replace("smoobu-", "")
-                try:
-                    from .smoobu import _smoobu_put
-                    notice = f"Código de acesso / Access code: {r.access_pin}"
-                    await _smoobu_put(f"/api/reservations/{smoobu_id}", {"notice": notice})
-                    logger.info(f"PIN {r.access_pin} enviado ao Smoobu para reserva {smoobu_id}")
-                except Exception as e:
-                    logger.warning(f"Não foi possível actualizar notice no Smoobu: {e}")
+        if r.access_pin and (r.ical_uid or "").startswith("smoobu-"):
+            smoobu_id = r.ical_uid.replace("smoobu-", "")
+            try:
+                from .smoobu import _smoobu_put
+                await _smoobu_put(f"/api/reservations/{smoobu_id}", {"notice": r.access_pin})
+                logger.info(f"PIN {r.access_pin} enviado para Smoobu reserva {smoobu_id}")
+            except Exception as e:
+                logger.warning(f"Não foi possível enviar PIN ao Smoobu: {e}")
         if r.guest_email:
             rows = db.query(models.Settings).all()
             settings = {row.key: row.value for row in rows}
