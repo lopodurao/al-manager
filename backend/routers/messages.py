@@ -40,3 +40,10 @@ def delete_message(mid: str, db: Session = Depends(get_db), _=Auth):
     m = db.query(models.MessageTemplate).filter(models.MessageTemplate.id == mid).first()
     if not m: raise HTTPException(404)
     db.delete(m); db.commit()
+
+@router.post("/trigger-now", status_code=200)
+def trigger_messages_now(_=Auth):
+    """Manually fire the scheduled message job immediately (for testing)."""
+    from ..main import _send_scheduled_messages
+    _send_scheduled_messages()
+    return {"ok": True}
