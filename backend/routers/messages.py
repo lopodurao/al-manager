@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from typing import List
 from .. import models, schemas, auth
@@ -92,7 +92,7 @@ def trigger_messages_now(db: Session = Depends(get_db), _=Auth):
     return {"ok": True, "sent": sent_count}
 
 @router.post("/send-test", status_code=200)
-def send_test(data: dict, db: Session = Depends(get_db), _=Auth):
+def send_test(data: dict = Body(...), db: Session = Depends(get_db), _=Auth):
     from ..email_service import _send
     import uuid as _uuid
     tpl = db.query(models.MessageTemplate).filter(models.MessageTemplate.id == data["template_id"]).first()
