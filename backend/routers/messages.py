@@ -43,7 +43,33 @@ def delete_message(mid: str, db: Session = Depends(get_db), _=Auth):
 
 @router.post("/trigger-now", status_code=200)
 def trigger_messages_now(_=Auth):
-    """Manually fire the scheduled message job immediately (for testing)."""
     from ..main import _send_scheduled_messages
     _send_scheduled_messages()
     return {"ok": True}
+
+@router.post("/send-test", status_code=200)
+def send_test(data: dict, db: Session = Depends(get_db), _=Auth):
+    """Force-send a template to a reservation, ignoring time window."""
+    from .. import models
+    from ..email_service import _send
+    import uuid as _uuid
+    tpl = db.query(models.MessageTemplate).filter(models.MessageTemplate.id == data["template_id"]).first()
+    res = db.query(models.Reservation).filter(models.Reservation.id == data["reservation_id"]).first()
+    if not tpl or not res: raise HTTPException(404)
+    to_email = data.get("override_email") or res.guest_email
+    prop = db.query(models.Property).filter(models.Property.id == res.prop_id).first()
+    s = {r.key: r.value for r in db.query(models.Settings).all()}
+    body = (tpl.body or "") \
+        .replace("{{guest}}", res.guest_name or "") \
+        .replace("{{property}}", prop.name if prop else "") \
+        .replace("{{checkin_date}}", res.checkin or "") \
+        .replace("{{checkout_date}}", res.checkout or "") \
+        .replace("{{checkin_time}}", s.get("checkinTime", "16:00")) \
+        .replace("{{checkout_time}}", s.get("checkoutTime", "11:00")) \
+        .replace("{{access_code}}", res.access_pin or s.get("accessCode", "")) \
+        .replace("{{key_location}}", s.get("keyLocation", ""))
+    subject = (tpl.subject or "") \
+        .replace("{{property}}", prop.name if prop else "") \
+        .replace("{{guest}}", res.guest_name or "")
+    sent = _send(to_email, subject, f"<pre style='font-family:inherit;white-space:pre-wrap'>{body}</pre>")
+    return {"ok": sent, "to": to_email, "subject": subject}
