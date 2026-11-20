@@ -45,7 +45,7 @@ async function renderMessages() {
 }
 
 function triggerLabel(t) {
-  return {'booking':'Na reserva','checkin-1d':'1 dia antes check-in','checkin-0d':'No check-in','checkout-1d':'1 dia antes check-out','checkout+1d':'1 dia após check-out'}[t]||t;
+  return {'booking':'Na reserva','checkin-1d':'1 dia antes check-in','checkin-2h':'2 horas antes check-in','checkin-0d':'No check-in','checkout-1d':'1 dia antes check-out','checkout+1d':'1 dia após check-out'}[t]||t;
 }
 
 async function doToggleMessage(id) {
@@ -67,7 +67,7 @@ function msgForm(m) {
     <div class="form-group"><label>Canal</label><select id="mf-ch"><option value="all" ${m?.channel==='all'?'selected':''}>Email+SMS</option><option value="email" ${m?.channel==='email'?'selected':''}>Email</option><option value="sms" ${m?.channel==='sms'?'selected':''}>SMS</option></select></div>
   </div>
   <div class="form-row">
-    <div class="form-group"><label>Gatilho</label><select id="mf-trigger">${[['booking','Na reserva'],['checkin-1d','1 dia antes check-in'],['checkin-0d','No check-in'],['checkout-1d','1 dia antes check-out'],['checkout+1d','1 dia após check-out']].map(([v,l])=>`<option value="${v}" ${m?.trigger===v?'selected':''}>${l}</option>`).join('')}</select></div>
+    <div class="form-group"><label>Gatilho</label><select id="mf-trigger">${[['booking','Na reserva'],['checkin-1d','1 dia antes check-in'],['checkin-2h','2 horas antes check-in'],['checkin-0d','No check-in'],['checkout-1d','1 dia antes check-out'],['checkout+1d','1 dia após check-out']].map(([v,l])=>`<option value="${v}" ${m?.trigger===v?'selected':''}>${l}</option>`).join('')}</select></div>
     <div class="form-group"><label>Ativo</label><select id="mf-active"><option value="1" ${m?.active!==false?'selected':''}>Sim</option><option value="0" ${m?.active===false?'selected':''}>Não</option></select></div>
   </div>
   <div class="form-group"><label>Assunto</label><input id="mf-subject" value="${escHtml(m?.subject||'')}"></div>
